@@ -34,6 +34,10 @@ INCOMPLETE_ROUND_GRACE = dt.timedelta(hours=2)
 # A graded round still absent from the source this long after its scheduled release is reported.
 SOURCE_LAG_ALERT = dt.timedelta(minutes=30)
 
+# The repository registered on Brightspace. Production refuses to run anywhere else, so a
+# rename/transfer/fork cannot silently submit into the wrong place.
+EXPECTED_REPO = os.environ.get("QUIZ_EXPECTED_REPO", "mapledang/dso429-hourly-quiz")
+
 ANSWERS_DIR = "answers"
 STATE_DIR = "state"
 BRANCH = os.environ.get("QUIZ_BRANCH", "main")
@@ -58,6 +62,18 @@ def timing_credit(released_at: dt.datetime, received_at: dt.datetime) -> float:
     if hours >= 12:
         return 0.0
     return round(1.0 - 0.1 * (int(hours) - 2), 2)
+
+
+def graded_version(versions: list[tuple[dt.datetime, bytes]], released_at: dt.datetime):
+    """Apply the assignment's rule to (received_at, content) pushes of one round file:
+    the last version received within 3 hours of release; otherwise the first one after.
+    Exactly 3:00:00 is treated as outside the window (conservative reading of "within")."""
+    ordered = sorted(versions, key=lambda v: v[0])
+    cutoff = released_at + FREE_REVISION_WINDOW
+    within = [v for v in ordered if v[0] < cutoff]
+    if within:
+        return within[-1]
+    return next(iter(ordered), None)
 
 
 def can_revise(released_at: dt.datetime, now: dt.datetime) -> bool:

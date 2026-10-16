@@ -62,8 +62,8 @@ _FREQ = {
 @solver("compound_interest")
 def compound_interest(q: str, opts: list[str]):
     m = _search(
-        NUM + r".{0,60}?(?:grows|invested|deposited|earns|compounds).{0,40}?" + NUM
-        + r"\s*%.{0,30}?compounded\s+([a-z-]+).{0,80}?(?:after|in|for)\s+" + NUM
+        NUM + r"[^\d]{0,60}?(?:grows|invested|deposited|earns|compounds)[^\d]{0,40}?" + NUM
+        + r"\s*%[^\d]{0,30}?compounded\s+([a-z-]+)[^\d]{0,80}?(?:after|in|for)\s+" + NUM
         + r"\s*(years?|months?|quarters?)", q)
     if not m:
         return None
@@ -84,7 +84,7 @@ def compound_interest(q: str, opts: list[str]):
 
 @solver("simple_interest")
 def simple_interest(q: str, opts: list[str]):
-    m = _search(NUM + r".{0,60}?" + NUM + r"\s*%\s*simple interest.{0,80}?" + NUM + r"\s*years?", q)
+    m = _search(NUM + r"[^\d]{0,60}?" + NUM + r"\s*%\s*simple interest[^\d]{0,80}?" + NUM + r"\s*years?", q)
     if not m:
         return None
     p, r, t = num(m.group(1)), num(m.group(2)) / 100, num(m.group(3))
@@ -98,7 +98,7 @@ def simple_interest(q: str, opts: list[str]):
 
 @solver("discount")
 def discount(q: str, opts: list[str]):
-    m = _search(r"(?:listed|priced|costs?)\s+(?:at\s+)?" + NUM + r".{0,40}?discounted\s+by\s+" + NUM + r"\s*%", q)
+    m = _search(r"(?:listed|priced|costs?)\s+(?:at\s+)?" + NUM + r"[^\d]{0,40}?discounted\s+by\s+" + NUM + r"\s*%", q)
     if not m:
         return None
     price, pct = num(m.group(1)), num(m.group(2))
@@ -111,7 +111,7 @@ def discount(q: str, opts: list[str]):
 
 @solver("markup")
 def markup(q: str, opts: list[str]):
-    m = _search(r"costs?\s+" + NUM + r".{0,60}?mark(?:ed)?[\s-]*up\s+(?:by\s+)?" + NUM + r"\s*%", q)
+    m = _search(r"costs?\s+" + NUM + r"[^\d]{0,60}?mark(?:ed)?[\s-]*up\s+(?:by\s+)?" + NUM + r"\s*%", q)
     if not m:
         return None
     cost, pct = num(m.group(1)), num(m.group(2))
@@ -121,7 +121,7 @@ def markup(q: str, opts: list[str]):
 
 @solver("sales_tax")
 def sales_tax(q: str, opts: list[str]):
-    m = _search(NUM + r".{0,60}?" + NUM + r"\s*%\s*(?:sales\s+)?tax", q)
+    m = _search(NUM + r"[^\d]{0,60}?" + NUM + r"\s*%\s*(?:sales\s+)?tax", q)
     if not m or not _search(r"total|including tax|after tax", q):
         return None
     base, pct = num(m.group(1)), num(m.group(2))
@@ -140,7 +140,7 @@ def revenue(q: str, opts: list[str]):
 
 @solver("currency_conversion")
 def currency(q: str, opts: list[str]):
-    m = _search(r"(?:for|of)\s+" + NUM + r".{0,40}?converted\s+to\s+([a-z ]+?)\s+at\s+" + NUM
+    m = _search(r"(?:for|of)\s+" + NUM + r"[^\d]{0,40}?converted\s+to\s+([a-z ]+?)\s+at\s+" + NUM
                 + r"\s+([a-z ]+?)\s+per\s+(?:one\s+|1\s+)?([a-z .]+?)[.?,]", q)
     if not m:
         return None
@@ -159,7 +159,7 @@ def currency(q: str, opts: list[str]):
 
 @solver("gross_margin")
 def gross_margin(q: str, opts: list[str]):
-    m = _search(NUM + r"\s+in\s+revenue.{0,40}?" + NUM + r"\s+in\s+cost of goods sold", q)
+    m = _search(NUM + r"\s+in\s+revenue[^\d]{0,40}?" + NUM + r"\s+in\s+cost of goods sold", q)
     if not m or not _search(r"gross margin", q):
         return None
     rev, cogs = num(m.group(1)), num(m.group(2))
@@ -185,8 +185,8 @@ def weighted_average(q: str, opts: list[str]):
 
 @solver("break_even")
 def break_even(q: str, opts: list[str]):
-    m = _search(r"fixed costs (?:are|of|total)\s+" + NUM + r".{0,60}?sells for\s+" + NUM
-                + r".{0,40}?variable cost (?:of\s+)?" + NUM, q)
+    m = _search(r"fixed costs (?:are|of|total)\s+" + NUM + r"[^\d]{0,60}?sells for\s+" + NUM
+                + r"[^\d]{0,40}?variable cost (?:of\s+)?" + NUM, q)
     if not m:
         return None
     fixed, price, var = (num(g) for g in m.groups())
@@ -235,7 +235,7 @@ _ORDINALS = {"first": 0, "second": 1, "third": 2, "fourth": 3}
 
 @solver("ratio_split")
 def ratio_split(q: str, opts: list[str]):
-    m = _search(NUM + r".{0,60}?split\s+.{0,60}?ratio\s+(\d+(?:\s*:\s*\d+)+).{0,60}?(first|second|third|fourth)", q)
+    m = _search(NUM + r"[^\d]{0,60}?split\s+[^\d]{0,60}?ratio\s+(\d+(?:\s*:\s*\d+)+)[^\d]{0,60}?(first|second|third|fourth)", q)
     if not m:
         return None
     total = num(m.group(1))
@@ -270,7 +270,7 @@ def sequence(q: str, opts: list[str]):
 
 @solver("date_settlement")
 def date_settlement(q: str, opts: list[str]):
-    m = _search(r"signed on\s+(\d{1,2}\s+[A-Za-z]+\s+\d{4}).{0,40}?(\d+)[\s-]*day", q)
+    m = _search(r"signed on\s+(\d{1,2}\s+[A-Za-z]+\s+\d{4})[^\d]{0,40}?(\d+)[\s-]*day", q)
     if not m:
         return None
     start = parse_date(m.group(1))

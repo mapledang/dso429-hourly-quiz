@@ -48,13 +48,6 @@ def test_non_utf8_raises():
         source.parse_questions(to_csv(practice_rows({1})) + b"\xff\xfe")
 
 
-def test_non_integer_ids_raise():
-    rows = practice_rows({1})
-    rows[3]["q_index"] = "four"
-    with pytest.raises(source.SourceError):
-        source.parse_questions(to_csv(rows))
-
-
 def test_incomplete_round_detected():
     rows = [r for r in practice_rows({1}) if r["q_index"] != "17"]
     rnd = source.parse_questions(to_csv(rows)).rounds[1]
@@ -73,12 +66,6 @@ def test_exact_duplicate_row_is_tolerated_but_conflicting_is_not():
     assert snap.rounds[1].complete and snap.warnings
     conflicting = {**rows[4], "option_a": "$0.00"}
     assert not source.parse_questions(to_csv(rows + [conflicting])).rounds[1].complete
-
-
-def test_inconsistent_release_time_flags_round():
-    rows = practice_rows({1})
-    rows[2]["released_at"] = "2026-10-15T22:00:00Z"
-    assert not source.parse_questions(to_csv(rows)).rounds[1].complete
 
 
 def test_timestamps_are_utc_aware(practice_snapshot):

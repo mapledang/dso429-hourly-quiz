@@ -13,8 +13,14 @@ from pathlib import Path
 
 from . import config
 from .http import backoff_delay
+from .redact import redact
 
 log = logging.getLogger(__name__)
+
+
+AUTH_ERRORS = ("403", "401", "Permission to", "permission denied", "Permission denied", "Authentication failed",
+               "could not read Username", "Invalid username or password", "terminal prompts disabled",
+               "denied to", "Write access to repository not granted")
 
 
 class GitError(Exception):
@@ -36,7 +42,7 @@ class Repo:
     def git(self, *args: str, check: bool = True, input: bytes | None = None) -> subprocess.CompletedProcess:
         proc = subprocess.run(["git", *args], cwd=self.path, capture_output=True, input=input, timeout=120)
         if check and proc.returncode != 0:
-            err = proc.stderr.decode(errors="replace").strip()
+            err = redact(proc.stderr.decode(errors="replace").strip())
             raise GitError(f"git {args[0]} failed ({proc.returncode}): {err[-500:]}")
         return proc
 
@@ -50,12 +56,20 @@ class Repo:
                 self.sleep(backoff_delay(attempt, base=2))
         raise GitError(f"git fetch failed: {proc.stderr.decode(errors='replace')[-300:]}")
 
-    def remote_files(self, prefix: str) -> list[str]:
-        proc = self.git("ls-tree", "-r", "--name-only", self.remote_ref, "--", prefix, check=False)
-        return proc.stdout.decode().split() if proc.returncode == 0 else []
+    def remote_files(self, prefix: str = "") -> list[str]:
+        """All tracked paths on remote main, optionally under `prefix` ("" = whole tree)."""
+        args = ["ls-tree", "-r", "--name-only", "-z", self.remote_ref]
+        if prefix:
+            args += ["--", prefix]
+        proc = self.git(*args, check=False)
+        return [p for p in proc.stdout.decode().split("\0") if p] if proc.returncode == 0 else []
 
     def remote_blob(self, path: str) -> bytes | None:
         proc = self.git("show", f"{self.remote_ref}:{path}", check=False)
+        return proc.stdout if proc.returncode == 0 else None
+
+    def committed_blob(self, path: str) -> bytes | None:
+        proc = self.git("show", f"HEAD:{path}", check=False)
         return proc.stdout if proc.returncode == 0 else None
 
     def current_branch(self) -> str:
@@ -82,15 +96,15 @@ class Repo:
             proc = self.git("push", "--quiet", self.remote, f"HEAD:refs/heads/{self.branch}", check=False)
             if proc.returncode == 0:
                 return
-            last = proc.stderr.decode(errors="replace").strip()
+            last = redact(proc.stderr.decode(errors="replace").strip())
             log.warning("push attempt %d failed: %s", attempt + 1, last[-300:])
             if any(s in last for s in ("rejected", "non-fast-forward", "fetch first")):
                 self.fetch()
                 if self.git("rebase", "--quiet", self.remote_ref, check=False).returncode != 0:
                     self.git("rebase", "--abort", check=False)
                     raise RebaseConflict("rebase onto remote main conflicted")
-            elif any(s in last for s in ("403", "Permission", "denied", "Authentication")):
-                raise GitError(f"push not authorised: {last[-300:]}")
+            elif any(s in last for s in AUTH_ERRORS):
+                raise GitError(f"push not authorised (check token / 'contents: write' permission): {last[-300:]}")
             if attempt < attempts - 1:
                 self.sleep(backoff_delay(attempt, base=2))
         raise GitError(f"push failed after {attempts} attempts: {last[-300:]}")

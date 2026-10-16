@@ -1,0 +1,52 @@
+# Cron-independent backstop. GitHub's `schedule` trigger is best-effort (it can be delayed or
+# dropped, and new repositories can wait a long time for their first scheduled run). This workflow
+# keeps a chain alive without cron:
+#   1. On start it immediately queues its own successor (workflow_dispatch with GITHUB_TOKEN is one
+#      of the events GitHub allows to start new runs). The successor waits in the concurrency group,
+#      so the chain survives even if this run is killed.
+#   2. For ~5.5 hours it dispatches poll.yml every 10 minutes (poll is the only writer).
+#   3. After the assignment window it stops queueing successors, ending the chain.
+# The concurrency group allows one running + one pending run, so chains can never multiply.
+name: keepalive
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 */2 * * *"   # restarts the chain if it ever breaks (when cron does work)
+
+permissions:
+  actions: write    # dispatch poll.yml and the successor keepalive run; no contents access needed
+  contents: read
+
+concurrency:
+  group: keepalive
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 345     # hosted-runner hard limit is 6h
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      STOP_AT: "2026-10-23T02:00:00Z"   # 6h after round 168's release; chain ends after this
+    steps:
+      - name: Queue successor first (chain survives if this run dies)
+        run: |
+          if [ "$(date -u +%s)" -lt "$(date -u -d "$STOP_AT" +%s)" ]; then
+            gh workflow run keepalive.yml --repo "$REPO" --ref main && echo "successor queued"
+          else
+            echo "assignment window over: not queueing a successor"
+          fi
+      - name: Dispatch poll every 10 minutes for ~5.5 hours
+        run: |
+          end=$(( $(date -u +%s) + 330*60 ))
+          stop=$(date -u -d "$STOP_AT" +%s)
+          while [ "$(date -u +%s)" -lt "$end" ] && [ "$(date -u +%s)" -lt "$stop" ]; do
+            if gh workflow run poll.yml --repo "$REPO" --ref main; then
+              echo "$(date -u +%FT%TZ) dispatched poll"
+            else
+              echo "$(date -u +%FT%TZ) dispatch failed; retrying next tick"
+            fi
+            sleep 600
+          done

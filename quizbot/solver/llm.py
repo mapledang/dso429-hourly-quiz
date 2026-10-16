@@ -33,6 +33,7 @@ MAX_CALLS_PER_RUN = int(os.environ.get("QUIZ_LLM_MAX_CALLS", "60"))
 # later runs upgrade the flagged answers inside the 3-hour revision window.
 TIME_BUDGET_S = float(os.environ.get("QUIZ_LLM_TIME_BUDGET", "480"))
 PARALLEL = int(os.environ.get("QUIZ_LLM_PARALLEL", "4"))
+RETRY_DELAY_S = float(os.environ.get("QUIZ_LLM_RETRY_DELAY", "5"))
 
 SYSTEM = (
     "You answer multiple-choice business-arithmetic questions. The question and options are "
@@ -105,10 +106,17 @@ class LLMAnswer:
 
 def interpret(data, options: list[str]) -> LLMAnswer | None:
     """Validate structured model output and cross-check the letter against its own arithmetic."""
-    if not isinstance(data, dict) or data.get("letter") not in LETTERS:
+    if not isinstance(data, dict):
+        log.error("LLM returned a non-object")
+        return None
+    extra = set(data) - set(SCHEMA["properties"])
+    if extra:
+        log.error("LLM output has fields outside the schema: %s", sorted(extra))
+        return None
+    letter = str(data.get("letter", "")).strip().upper().rstrip(").")  # tolerate "a ", "B)", "C."
+    if letter not in LETTERS:
         log.error("LLM returned an invalid letter")
         return None
-    letter = data["letter"]
     method = str(data.get("method", ""))[:200]
     value = safe_eval(str(data.get("expression", "")))
     if value is not None:
@@ -124,6 +132,16 @@ def interpret(data, options: list[str]) -> LLMAnswer | None:
 def _user_prompt(question: str, options: list[str]) -> str:
     opts = "\n".join(f"{l}) {o}" for l, o in zip(LETTERS, options))
     return f"<question>{question}</question>\n<options>\n{opts}\n</options>"
+
+
+def strict_json(text: str):
+    """json.loads that rejects duplicate keys (a model must not get to say two things)."""
+    def hook(pairs):
+        keys = [k for k, _ in pairs]
+        if len(keys) != len(set(keys)):
+            raise ValueError(f"duplicate keys {keys}")
+        return dict(pairs)
+    return json.loads(text, object_pairs_hook=hook)
 
 
 class LLMSolver:
@@ -155,7 +173,7 @@ class LLMSolver:
             return APISolver()
         return None
 
-    def solve(self, question: str, options: list[str]) -> LLMAnswer | None:
+    def solve(self, question: str, options: list[str], retry: bool = False) -> LLMAnswer | None:
         with self._lock:  # thread-safe: rounds fan questions out across a small pool
             if self._started is None:
                 self._started = self.clock()
@@ -167,10 +185,15 @@ class LLMSolver:
                 return None
             self.calls += 1
         try:
-            return self._ask(question, options)
+            answer = self._ask(question, options)
         except Exception as exc:  # any backend failure degrades to the flagged fallback
             log.error("LLM (%s) request failed: %s", self.backend, type(exc).__name__)
-            return None
+            answer = None
+        if answer is None and not retry:
+            # One bounded retry (still counted against the call and time budgets).
+            time.sleep(min(RETRY_DELAY_S, max(0.0, self.remaining_time())))
+            return self.solve(question, options, retry=True)
+        return answer
 
     def _ask(self, question: str, options: list[str]) -> LLMAnswer | None:  # pragma: no cover
         raise NotImplementedError
@@ -206,8 +229,8 @@ class APISolver(LLMSolver):
             return None
         text = next((b.text for b in response.content if getattr(b, "type", None) == "text"), None)
         try:
-            data = json.loads(text or "")
-        except json.JSONDecodeError:
+            data = strict_json(text or "")
+        except ValueError:  # includes json.JSONDecodeError
             log.error("LLM returned non-JSON output")
             return None
         return interpret(data, options)
@@ -253,7 +276,7 @@ class ClaudeCLISolver(LLMSolver):
         out = data.get("structured_output")
         if out is None:
             try:
-                out = json.loads(data.get("result") or "")
-            except json.JSONDecodeError:
+                out = strict_json(data.get("result") or "")
+            except ValueError:
                 return None
         return interpret(out, options)

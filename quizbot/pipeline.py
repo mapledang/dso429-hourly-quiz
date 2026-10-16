@@ -37,6 +37,8 @@ class RunReport:
     incomplete: dict[int, str] = field(default_factory=dict)
     needs_review: dict[int, list[int]] = field(default_factory=dict)
     source_lag: list[int] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    round_errors: dict[int, str] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
     llm_calls: int = 0
 
@@ -68,6 +70,8 @@ class RunReport:
             lines.append(f"- **Needs review** (round: questions answered by guess/unverified LLM): {self.needs_review}")
         if self.source_lag:
             lines.append(f"- Scheduled but not yet in source (>30 min late): {fmt(self.source_lag)}")
+        for w in self.warnings:
+            lines.append(f"- WARNING: {w}")
         for e in self.errors:
             lines.append(f"- **ERROR**: {e}")
         return "\n".join(lines) + "\n"
@@ -160,7 +164,9 @@ class Pipeline:
             r, was = fresh.get(i), prev_status.get(i, "guess" if i in flagged else "kept")
             if r is not None and (i in text_changed or _rank(r.status) > _rank(was)):
                 merged.append(r)
-                changed = changed or r.letter != old[i] or _rank(r.status) != _rank(was)
+                # A changed question always records its new hash/log (even when the letter is the
+                # same), otherwise every later run would re-solve it again.
+                changed = changed or i in text_changed or r.letter != old[i] or _rank(r.status) != _rank(was)
             else:
                 keep = was if was in FLAGGED_STATUSES else "kept"
                 merged.append(QuestionResult(i, old[i], keep, "kept", "kept previously submitted answer", ""))
@@ -185,6 +191,10 @@ class Pipeline:
         report.rounds_in_source = sorted(snap.rounds)
         for w in snap.warnings:
             log.warning(w)
+            report.warnings.append(f"source: {w}")
+        out_of_range = sorted(r for r in snap.rounds if r not in config.ALL_ROUNDS)
+        if out_of_range:
+            report.warnings.append(f"source contains rounds outside 1-168 (ignored, investigate): {out_of_range}")
 
         for r in config.GRADED_ROUNDS:
             sched = config.scheduled_release(r)
@@ -195,9 +205,16 @@ class Pipeline:
             try:
                 self._reconcile(snap, now, report)
                 break
-            except RebaseConflict:
+            except GitError as exc:
+                if not isinstance(exc, RebaseConflict):
+                    report.errors.append(f"GitHub unavailable or git failed: {exc}")
+                    break
                 log.warning("remote main moved underneath us; rebuilding from remote state (restart %d)", restart + 1)
-                self.repo.sync_to_remote()
+                try:
+                    self.repo.sync_to_remote()
+                except GitError as sync_exc:
+                    report.errors.append(f"GitHub unavailable while re-syncing: {sync_exc}")
+                    break
                 report.solved.clear(), report.revised.clear(), report.pushed.clear()
                 report.already_submitted.clear(), report.needs_review.clear()
         else:
@@ -210,8 +227,14 @@ class Pipeline:
         production = self.mode == "production"
         if production:
             self.repo.sync_to_remote()
-        manifest = state.load(self.repo.remote_blob(state.MANIFEST) if production else None)
+        raw_manifest = self.repo.remote_blob(state.MANIFEST) if production else None
+        manifest = state.load(raw_manifest)
+        if raw_manifest and manifest.get("_corrupt"):
+            report.warnings.append("state/manifest.json was corrupt; rebuilt from remote answers/ (authoritative)")
+            manifest.pop("_corrupt", None)
         manifest_before = json.dumps(manifest["rounds"], sort_keys=True)
+        if production:
+            self._check_consistency(snap, manifest, report)
 
         targets = [r for r in snap.rounds.values() if r.round_id in config.ALL_ROUNDS
                    and (self.only_rounds is None or r.round_id in self.only_rounds)]
@@ -235,7 +258,7 @@ class Pipeline:
                 past_grace = (rnd.released_at is not None and config.is_graded(rid)
                               and now - rnd.released_at >= config.INCOMPLETE_ROUND_GRACE)
                 detail = f"missing q{rnd.missing_indices}; problems={rnd.problems[:3]}"
-                if old_valid or not past_grace or rnd.problems:
+                if old_valid or not past_grace:
                     report.incomplete[rid] = detail
                     entry["retries"] = entry.get("retries", 0) + 1
                     entry["status"] = "incomplete_in_source"
@@ -246,21 +269,38 @@ class Pipeline:
                           now - rnd.released_at)
                 report.incomplete[rid] = detail + " (submitted with guesses past grace period)"
 
-            if old_valid:
-                results = self._revision(rnd, old_raw, entry, now)
-                if results is None:
-                    report.already_submitted.append(rid)
-                    entry["status"] = "submitted"
-                    continue
-                report.revised.append(rid)
-            else:
-                if old_raw is not None:
-                    log.error("round %d: existing file invalid (%s); replacing", rid,
-                              answers.validate_bytes(old_raw, rid))
-                results = _solve_with_gaps(rnd, self.llm)
-                report.solved.append(rid)
+            try:
+                if old_valid:
+                    results = self._revision(rnd, old_raw, entry, now)
+                    if results is None:
+                        report.already_submitted.append(rid)
+                        entry["status"] = "submitted"
+                        continue
+                    report.revised.append(rid)
+                else:
+                    if old_raw is not None:
+                        report.warnings.append(f"round {rid}: existing file invalid "
+                                               f"({answers.validate_bytes(old_raw, rid)[:2]}); replacing")
+                    results = _solve_with_gaps(rnd, self.llm)
+                    report.solved.append(rid)
+                    if rnd.released_at and config.is_graded(rid):
+                        late = now - rnd.released_at
+                        if late > dt.timedelta(hours=1):
+                            report.warnings.append(f"round {rid}: first submission {late.total_seconds() / 60:.0f} "
+                                                   f"min after release (timing credit at risk)")
+                payload = answers.build(rid, {r.q_index: r.letter for r in results})
+                if answers.validate(payload, rid):
+                    raise ValueError(f"generated payload invalid: {answers.validate(payload, rid)}")
+            except Exception as exc:  # isolate: one bad round must not block the others
+                log.exception("round %d failed", rid)
+                report.round_errors[rid] = f"{type(exc).__name__}: {exc}"[:300]
+                report.errors.append(f"round {rid} not submitted: {type(exc).__name__}: {exc}"[:300])
+                for lst in (report.solved, report.revised):
+                    if rid in lst:
+                        lst.remove(rid)
+                entry["status"] = "solve_failed"
+                continue
 
-            payload = answers.build(rid, {r.q_index: r.letter for r in results})
             flagged = [r.q_index for r in results if not r.confident and r.status != "kept"]
             if flagged:
                 report.needs_review[rid] = flagged
@@ -296,6 +336,16 @@ class Pipeline:
                 # Status-only change (e.g. a round became incomplete): record it durably.
                 self._commit_state(manifest, "state: update round status")
 
+    def _check_consistency(self, snap: Snapshot, manifest: dict, report: RunReport) -> None:
+        remote = set(self.repo.remote_files(config.ANSWERS_DIR))
+        for key, entry in manifest["rounds"].items():
+            rid = int(key)
+            if entry.get("status") == "submitted" and config.answer_path(rid) not in remote:
+                report.warnings.append(f"round {rid}: manifest says submitted but remote file is missing; resubmitting")
+            if rid not in snap.rounds and config.answer_path(rid) in remote:
+                report.warnings.append(f"round {rid}: submitted earlier but no longer in source CSV "
+                                       f"(source regression/stale fetch); submission preserved")
+
     def _push(self, pending, expected, manifest, report: RunReport, now) -> None:
         rounds = sorted(pending)
         manifest["last_submission"] = _iso(now)
@@ -303,7 +353,13 @@ class Pipeline:
         paths = [p for ps in pending.values() for p in ps] + [state.MANIFEST]
         label = f"{rounds[0]}" if len(rounds) == 1 else f"{rounds[0]}-{rounds[-1]} ({len(rounds)} rounds)"
         try:
-            if self.repo.commit(paths, f"answers: round {label}"):
+            committed = self.repo.commit(paths, f"answers: round {label}")
+            if committed:
+                # Re-check what was actually committed against what was validated (catches any
+                # modification between validation and commit) before anything leaves the runner.
+                bad = [p for p, data in expected.items() if self.repo.committed_blob(p) != data]
+                if bad:
+                    raise GitError(f"committed content differs from validated content for {bad}; not pushing")
                 self.repo.push()
             report.pushed.extend(rounds)
             ok = self.repo.verify_remote(expected)

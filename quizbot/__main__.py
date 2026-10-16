@@ -9,7 +9,8 @@ import os
 import sys
 from pathlib import Path
 
-from . import audit, config, evaluate, source
+from . import audit, config, evaluate, redact, source
+from . import http as http_mod
 from .gitops import Repo
 from .pipeline import EXIT_FAILURE, Pipeline
 from .solver.llm import LLMSolver
@@ -46,6 +47,10 @@ def guard_production(args) -> None:
         sys.exit("refusing production mode outside GitHub Actions (pass --allow-local-production to override)")
     if os.environ.get("QUIZ_NOW"):
         sys.exit("refusing production mode with a simulated clock (QUIZ_NOW is set)")
+    actual = os.environ.get("GITHUB_REPOSITORY")
+    if actual and actual.lower() != config.EXPECTED_REPO.lower():
+        sys.exit(f"refusing production mode: running in {actual}, but the registered repository is "
+                 f"{config.EXPECTED_REPO} (renamed, transferred or forked?)")
 
 
 def cmd_run(args, only_rounds=None, allow_revise=True) -> int:
@@ -72,9 +77,17 @@ def cmd_run(args, only_rounds=None, allow_revise=True) -> int:
     return report.exit_code
 
 
+EXIT_BLOCKED = 2
+
+
 def cmd_evaluate(args) -> int:
-    snap = source.fetch_questions()
-    keys = source.fetch_keys()
+    try:
+        snap = source.fetch_questions()
+        keys = source.fetch_keys()
+    except (source.SourceError, http_mod.FetchError) as exc:
+        emit_summary(f"**Practice evaluation BLOCKED: questions or keys unavailable ({exc}). "
+                     f"No accuracy is reported.**")
+        return EXIT_BLOCKED
     if args.llm_only:
         llm = LLMSolver.from_env()
         if llm is None:
@@ -98,6 +111,9 @@ def cmd_evaluate(args) -> int:
         print(f"  {cat:22s} {v['correct']}/{v['total']}")
     for e in rep["errors"][:30]:
         print("  WRONG", e)
+    if not rep["full_coverage"]:
+        print(f"  INCOMPLETE COVERAGE: scored {rep['questions_scored']}/{rep['expected_questions']}, "
+              f"unkeyed={rep['questions_without_key']}, orphan keys={rep['keys_without_question'][:10]}")
     return 0 if rep["passes_threshold"] else EXIT_FAILURE
 
 
@@ -109,14 +125,19 @@ def cmd_audit(args) -> int:
         logging.error("source unavailable: %s", exc)
         snap = None
     slug = args.repo or os.environ.get("GITHUB_REPOSITORY")
-    rep = audit.run_audit(repo, snap, slug)
+    try:
+        keys = source.fetch_keys()
+    except (source.SourceError, http_mod.FetchError) as exc:
+        logging.warning("practice keys unavailable (%s); practice accuracy NOT evaluated", exc)
+        keys = None
+    rep = audit.run_audit(repo, snap, slug, keys=keys)
     if args.course_root:
         rep["local_usage_reports"] = audit.local_usage_report_present(Path(args.course_root))
     Path(args.report).parent.mkdir(parents=True, exist_ok=True)
     Path(args.report).write_text(json.dumps(rep, indent=2, default=str) + "\n")
     emit_summary("```\n" + audit.summarize(rep) + "\n```")
-    bad = rep["counts"]["missing"] + rep["counts"]["invalid_file"]
-    return EXIT_FAILURE if bad or (slug and not rep.get("repo_public")) else 0
+    bad = sum(rep["counts"][s] for s in audit.PROBLEM_STATES)
+    return EXIT_FAILURE if bad or rep["problems"] else 0
 
 
 def cmd_watchdog(args) -> int:
@@ -140,6 +161,7 @@ def cmd_watchdog(args) -> int:
 
 def main(argv=None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    redact.install()
     p = argparse.ArgumentParser(prog="quizbot")
     sub = p.add_subparsers(dest="cmd", required=True)
 

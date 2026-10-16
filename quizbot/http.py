@@ -56,7 +56,7 @@ def get(url: str, *, headers: dict | None = None, timeout: float = 20.0, attempt
         except urllib.error.HTTPError as exc:
             last_error = f"HTTP {exc.code}"
             if exc.code not in RETRYABLE_STATUS:
-                raise FetchError(f"{url}: {last_error} (not retryable)") from exc
+                raise FetchError(f"{url}: {describe_status(exc.code)} (not retryable)") from exc
             retry_after = exc.headers.get("Retry-After") if exc.headers else None
             delay = min(float(retry_after), 60.0) if retry_after and retry_after.isdigit() else backoff_delay(attempt)
         except (urllib.error.URLError, TimeoutError, ConnectionError, OSError) as exc:
@@ -66,3 +66,8 @@ def get(url: str, *, headers: dict | None = None, timeout: float = 20.0, attempt
             log.warning("fetch %s failed (%s); retry %d/%d in %.1fs", url, last_error, attempt + 1, attempts - 1, delay)
             sleep(delay)
     raise FetchError(f"{url}: gave up after {attempts} attempts ({last_error})")
+
+
+def describe_status(code: int) -> str:
+    return {401: "unauthorised (missing/invalid token)", 403: "forbidden (token lacks permission or rate-limited)",
+            404: "not found (wrong URL, or repository private/renamed)"}.get(code, f"HTTP {code}")

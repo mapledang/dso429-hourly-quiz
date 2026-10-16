@@ -29,10 +29,13 @@ def load(raw: bytes | None) -> dict:
         return empty()
     try:
         data = json.loads(raw)
-    except json.JSONDecodeError:
-        return empty()
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        data = None
     base = empty()
-    base.update(data if isinstance(data, dict) else {})
+    if not isinstance(data, dict) or not isinstance(data.get("rounds", {}), dict):
+        base["_corrupt"] = True
+        return base
+    base.update(data)
     return base
 
 

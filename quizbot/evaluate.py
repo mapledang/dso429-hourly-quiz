@@ -41,10 +41,18 @@ def evaluate(snap: Snapshot, keys: dict[tuple[int, int], str], llm=None) -> dict
         correct += right
         per_round[rid] = {"correct": right, "total": len(results), "complete": rnd.complete}
     accuracy = correct / total if total else 0.0
+    present = {(rid, qi) for rid, rnd in snap.rounds.items() if rid in config.PRACTICE_ROUNDS
+               for qi in rnd.questions}
+    orphan_keys = sorted(k for k in keys if k[0] in config.PRACTICE_ROUNDS and k not in present)
+    expected_total = len(config.PRACTICE_ROUNDS) * config.QUESTIONS_PER_ROUND
+    full_coverage = total == expected_total and unkeyed == 0 and not orphan_keys
     return {
         "questions_scored": total, "correct": correct, "accuracy": round(accuracy, 6),
-        "threshold": ACCEPTANCE_THRESHOLD, "passes_threshold": accuracy >= ACCEPTANCE_THRESHOLD and total > 0,
+        "threshold": ACCEPTANCE_THRESHOLD, "expected_questions": expected_total,
+        "full_coverage": full_coverage,
+        "passes_threshold": full_coverage and accuracy >= ACCEPTANCE_THRESHOLD,
         "rounds_scored": len(per_round), "questions_without_key": unkeyed,
+        "keys_without_question": [list(k) for k in orphan_keys],
         "by_category": {k: {"correct": v[0], "total": v[1], "accuracy": round(v[0] / v[1], 6)}
                         for k, v in sorted(per_cat.items())},
         "by_status": dict(per_status), "per_round": per_round, "errors": errors,

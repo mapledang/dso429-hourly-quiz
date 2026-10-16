@@ -29,7 +29,9 @@ class Round:
     round_id: int
     released_at: dt.datetime | None
     questions: dict[int, dict] = field(default_factory=dict)
-    problems: list[str] = field(default_factory=list)
+    problems: list[str] = field(default_factory=list)   # blocking: round not ready
+    notes: list[str] = field(default_factory=list)      # non-blocking data-quality warnings
+    quarantined: set[int] = field(default_factory=set)  # q_index with conflicting duplicate rows
 
     @property
     def complete(self) -> bool:
@@ -65,37 +67,60 @@ def _parse_time(s: str) -> dt.datetime:
 
 
 def parse_questions(raw: bytes, *, origin: str = "", fetched_at: dt.datetime | None = None) -> Snapshot:
+    """Parse and validate questions.csv.
+
+    File-level problems (empty, not UTF-8, malformed/truncated CSV, missing or duplicated
+    required columns, HTML instead of CSV) reject the whole snapshot. Row-level problems are
+    isolated: a row without a usable round_id is dropped with a warning; any other bad row only
+    makes its own round not-ready, so one typo never blocks the other rounds."""
     if not raw or not raw.strip():
         raise SourceError("questions.csv is empty")
     try:
         text = raw.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
         raise SourceError(f"questions.csv is not UTF-8: {exc}") from exc
-    reader = csv.DictReader(io.StringIO(text, newline=""), strict=True)
-    header = [h.strip() for h in (reader.fieldnames or [])]
+    if text.lstrip()[:1] == "<":
+        raise SourceError("questions.csv looks like HTML/XML, not CSV (error page?)")
+    reader = csv.reader(io.StringIO(text, newline=""), strict=True)
+    try:
+        all_rows = list(reader)
+    except csv.Error as exc:
+        raise SourceError(f"malformed CSV (truncated?): {exc}") from exc
+    if not all_rows:
+        raise SourceError("questions.csv is empty")
+    header = [h.strip() for h in all_rows[0]]
     missing = [c for c in REQUIRED_COLUMNS if c not in header]
     if missing:
-        raise SourceError(f"questions.csv missing columns {missing}; header={header}")
-    reader.fieldnames = header
+        raise SourceError(f"questions.csv missing columns {missing}; header={header[:12]}")
+    dupes = sorted({h for h in header if header.count(h) > 1})
+    if dupes:
+        raise SourceError(f"questions.csv has duplicate/ambiguous columns {dupes}")
+    col = {c: header.index(c) for c in REQUIRED_COLUMNS}
 
     rounds: dict[int, Round] = {}
     warnings: list[str] = []
-    rows = 0
-    try:
-        parsed = list(reader)
-    except csv.Error as exc:
-        raise SourceError(f"malformed CSV (truncated?): {exc}") from exc
-    for line_no, row in enumerate(parsed, start=2):
-        rows += 1
-        if None in row or any(row.get(c) is None for c in REQUIRED_COLUMNS):
-            raise SourceError(f"line {line_no}: wrong number of fields (truncated file?)")
+    body = all_rows[1:]
+    if not body:
+        raise SourceError("questions.csv has a header but no rows")
+    for line_no, cells in enumerate(body, start=2):
+        if not any(c.strip() for c in cells):
+            continue  # blank line
+        if len(cells) != len(header):
+            raise SourceError(f"line {line_no}: {len(cells)} fields, expected {len(header)} (truncated file?)")
+        row = {c: cells[i] for c, i in col.items()}
         try:
-            rid, qi = int(row["round_id"].strip()), int(row["q_index"].strip())
+            rid = int(row["round_id"].strip())
+            if rid < 1:
+                raise ValueError
         except ValueError:
-            raise SourceError(f"line {line_no}: non-integer round_id/q_index")
-        if rid < 1:
-            raise SourceError(f"line {line_no}: invalid round_id {rid}")
+            warnings.append(f"line {line_no}: invalid round_id {row['round_id']!r}; row rejected")
+            continue
         rnd = rounds.setdefault(rid, Round(rid, None))
+        try:
+            qi = int(row["q_index"].strip())
+        except ValueError:
+            rnd.problems.append(f"line {line_no}: invalid q_index {row['q_index']!r}")
+            continue
         try:
             released = _parse_time(row["released_at"])
         except ValueError:
@@ -104,7 +129,11 @@ def parse_questions(raw: bytes, *, origin: str = "", fetched_at: dt.datetime | N
         if rnd.released_at is None:
             rnd.released_at = released
         elif rnd.released_at != released:
-            rnd.problems.append(f"q{qi}: released_at {released.isoformat()} differs from {rnd.released_at.isoformat()}")
+            # Conflicting timestamps: keep the EARLIEST (shortest, i.e. safest, revision window) and flag.
+            note = f"q{qi}: released_at {released.isoformat()} conflicts with {rnd.released_at.isoformat()}"
+            rnd.notes.append(note)
+            warnings.append(f"round {rid} {note}")
+            rnd.released_at = min(rnd.released_at, released)
         if not 1 <= qi <= config.QUESTIONS_PER_ROUND:
             rnd.problems.append(f"q_index {qi} out of range 1-25")
             continue
@@ -112,15 +141,17 @@ def parse_questions(raw: bytes, *, origin: str = "", fetched_at: dt.datetime | N
         if not q["question_text"].strip() or any(not q[f"option_{c}"].strip() for c in "abcd"):
             rnd.problems.append(f"q{qi}: empty question or option")
             continue
+        if qi in rnd.quarantined:
+            continue
         if qi in rnd.questions:
             if rnd.questions[qi] == q:
                 warnings.append(f"round {rid} q{qi}: exact duplicate row ignored")
-            else:
-                rnd.problems.append(f"q{qi}: conflicting duplicate rows")
+            else:  # never pick one of two different versions: quarantine the question
+                del rnd.questions[qi]
+                rnd.quarantined.add(qi)
+                rnd.problems.append(f"q{qi}: conflicting duplicate rows (quarantined)")
             continue
         rnd.questions[qi] = q
-    if rows == 0:
-        raise SourceError("questions.csv has a header but no rows")
     return Snapshot(rounds, fetched_at or config.now_utc(), origin, hashlib.sha256(raw).hexdigest(), warnings)
 
 
@@ -153,13 +184,25 @@ def fetch_questions(fetch=http.get) -> Snapshot:
 
 
 def parse_keys(raw: bytes) -> dict[tuple[int, int], str]:
+    """Parse practice_keys.csv strictly: any invalid letter, id or conflicting duplicate is an error
+    (an evaluator must never silently count a bad key)."""
+    if not raw or not raw.strip():
+        raise SourceError("practice_keys.csv is empty")
     reader = csv.DictReader(io.StringIO(raw.decode("utf-8-sig"), newline=""))
+    if not {"round_id", "q_index", "answer"} <= set(reader.fieldnames or []):
+        raise SourceError(f"practice_keys.csv bad header {reader.fieldnames}")
     keys = {}
-    for row in reader:
-        ans = row["answer"].strip().upper()
+    for line_no, row in enumerate(reader, start=2):
+        ans = (row["answer"] or "").strip()
         if ans not in ("A", "B", "C", "D"):
-            raise SourceError(f"bad key {row}")
-        keys[(int(row["round_id"]), int(row["q_index"]))] = ans
+            raise SourceError(f"practice key line {line_no}: invalid answer {row['answer']!r}")
+        try:
+            k = (int(row["round_id"]), int(row["q_index"]))
+        except (TypeError, ValueError):
+            raise SourceError(f"practice key line {line_no}: invalid ids")
+        if k in keys and keys[k] != ans:
+            raise SourceError(f"practice key {k}: conflicting answers")
+        keys[k] = ans
     return keys
 
 

@@ -14,7 +14,7 @@ from .templates import SOLVERS
 log = logging.getLogger(__name__)
 
 # Statuses that count as trustworthy without human review.
-CONFIDENT = {"exact", "close", "llm_verified"}
+CONFIDENT = {"exact", "llm_verified"}  # "close" (nearest within 0.5%) is used but flagged
 
 
 @dataclass
