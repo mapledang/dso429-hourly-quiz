@@ -1,0 +1,29 @@
+{
+  "CLOUD03": {
+    "status": "PASS-INDIRECT",
+    "url": "https://github.com/mapledang/dso429-hourly-quiz/actions/runs/38866570561",
+    "observed": "2026-10-16T07:20:21Z",
+    "evidence": "poll run created by the keepalive chain (GitHub API: event=workflow_dispatch, triggering_actor=github-actions[bot]) on GitHub-hosted ubuntu-24.04; no local process involved. Second consecutive autonomous dispatch, 10 min after run 38865517665.",
+    "not_tested": "The laptop was not physically powered off during this observation."
+  },
+  "CLOUD04": {
+    "status": "PASS-INDIRECT",
+    "url": "https://github.com/mapledang/dso429-hourly-quiz/actions/runs/38866570561",
+    "observed": "2026-10-16T07:20:21Z",
+    "evidence": "Cloud runs use no Claude Code session: log shows 'LLM fallback disabled' (no cloud credential configured), and the optional Claude backend authenticates only via a repository secret, never a local login.",
+    "not_tested": "The local Claude Code session was open while observing."
+  },
+  "CLOUD05": {
+    "status": "PASS-INDIRECT",
+    "url": "https://github.com/mapledang/dso429-hourly-quiz/actions/runs/38866570561",
+    "observed": "2026-10-16T07:20:21Z",
+    "evidence": "Source fetch, solving, push and verification all execute on the GitHub runner (runner image ubuntu-24.04 in log); the laptop's network is not on the path.",
+    "not_tested": "Local internet was not physically disconnected."
+  },
+  "CLOUD19": {
+    "status": "PASS",
+    "url": "https://github.com/mapledang/dso429-hourly-quiz/actions/runs/38865834729",
+    "observed": "2026-10-16T07:13:19Z",
+    "evidence": "Manual recover run (rounds 1-48, no_revise) completed success: 48 already submitted, nothing re-pushed. Earlier: invalid input '200' rejected before any git work (run 38860857255)."
+  }
+}

@@ -9,6 +9,8 @@ so no laptop needs to be on. Answers are committed to `answers/round-NNNN.json` 
 |---|---|---|
 | `poll.yml` | every 10 min (`3-59/10 * * * *` UTC) + manual | Fetch `questions.csv`, reconcile **every** released round against `answers/` on remote `main`, solve the missing ones, validate, commit, push, re-fetch and verify byte-for-byte. |
 | `reconcile.yml` | hourly at :37 UTC + manual | Same reconciliation (an independent second schedule), a watchdog that fails if `poll` hasn't succeeded in 45 min, and the full rounds 1–168 audit, uploaded as an artifact. |
+| `keepalive.yml` | self-chaining (+ cron restarter every 2h) | **Doesn't depend on cron.** Queues its own successor first, then dispatches `poll` every 10 min for about 5.5h. GitHub's cron fired **no** runs in this repo's first hour; this chain is what guarantees cadence. Stops itself after Oct 23 02:00 UTC. To stop it early: Actions → keepalive → cancel the running and pending runs. |
+| `llm-check.yml` | manual only | Scores the optional Claude fallback on 24 practice questions against the keys; never commits. |
 | `recover.yml` | manual only | Reconcile specific rounds, e.g. `49-52,60`. Defaults to filling only missing/invalid files. |
 | `ci.yml` | code pushes | Unit/integration tests, the 1,200-question practice evaluation (fails below 99%), and a live dry run. |
 
@@ -80,6 +82,11 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt -r requir
 ```
 
 `--mode production` refuses to run outside GitHub Actions unless you pass `--allow-local-production`.
+
+## Testing
+
+See [TESTING.md](TESTING.md): 370 tests tagged with 211 requirement IDs. Each run generates a
+traceability matrix (`reports/TEST_REPORT.md`) and JUnit XML.
 
 ## Monitoring and recovery
 

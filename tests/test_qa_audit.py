@@ -136,3 +136,17 @@ def test_n08_problems_listed_explicitly(audited):
                                           55: "requires_review", 56: "pushed_not_verified"}
     text = audit.summarize(audited)
     assert "Needs attention" in text and "PROBLEMS" in text and "Usage report" in text
+
+
+@req("N05")
+def test_n05_real_codebase_has_no_secret_scan_hits():
+    """The scanner must be precise enough that this repository's own code (which contains
+    redaction regexes and synthetic test tokens built at runtime) scans clean."""
+    from pathlib import Path
+    from quizbot.redact import TOKEN_PATTERNS
+    import subprocess
+    root = Path(__file__).parent.parent
+    tracked = subprocess.run(["git", "ls-files", "-z"], cwd=root, capture_output=True, check=True).stdout.decode().split("\0")
+    hits = [f for f in tracked if f and (root / f).is_file()
+            and any(t.search((root / f).read_text(errors="ignore")) for t in TOKEN_PATTERNS)]
+    assert tracked and hits == []

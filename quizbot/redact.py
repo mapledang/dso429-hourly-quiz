@@ -6,6 +6,14 @@ import logging
 import os
 import re
 
+# High-confidence credential formats: used both for redaction and for scanning the repository.
+TOKEN_PATTERNS = [
+    re.compile(r"sk-ant-[A-Za-z0-9_\-]{20,}"),                # Anthropic API / OAuth tokens
+    re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,}"),              # GitHub classic/app tokens
+    re.compile(r"github_pat_[A-Za-z0-9_]{40,}"),               # GitHub fine-grained tokens
+    re.compile(r"https?://[^/@\s:'\"]+:[^/@\s'\"{}]{8,}@"),     # credentials embedded in URLs
+]
+# Broader context patterns: redaction only (too noisy for scanning source code).
 _PATTERNS = [
     re.compile(r"sk-ant-[A-Za-z0-9_\-]{8,}"),                 # Anthropic API / OAuth tokens
     re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}"),              # GitHub tokens

@@ -16,7 +16,7 @@ from pathlib import Path
 
 from . import answers, config, http, state
 from .gitops import Repo
-from .redact import _PATTERNS as SECRET_PATTERNS
+from .redact import TOKEN_PATTERNS as SECRET_PATTERNS
 from .source import Snapshot
 
 log = logging.getLogger(__name__)
@@ -211,7 +211,7 @@ def summarize(report: dict) -> str:
              f"Practice accuracy of files on remote main: {report['practice_accuracy_on_remote']}",
              f"Unexpected answer files: {report['unexpected_answer_files'] or 'none'}; "
              f"secret-scan hits: {report['secret_scan_hits'] or 'none'}",
-             f"Last source check: {report.get('last_source_check')}",
+             f"Last source check recorded in manifest (written only when state changes): {report.get('last_source_check')}",
              f"Latest successful workflow run: {report.get('latest_successful_workflow_run')}",
              f"PROBLEMS: {report['problems'] or 'none'}",
              f"Usage report due now: {report['usage_report_due']}. {report['usage_report_note']}"]
