@@ -32,9 +32,13 @@ jobs:
         with:
           python-version: "3.12"
       - if: env.HAS_LLM == 'true'
+        continue-on-error: true  # optional: never block submission
+        timeout-minutes: 5
         run: pip install --disable-pip-version-check -r requirements.txt
       - name: Install Claude Code CLI (subscription fallback)
         if: env.HAS_CLAUDE == 'true'
+        continue-on-error: true  # optional: never block submission
+        timeout-minutes: 5
         run: npm install -g --no-fund --no-audit @anthropic-ai/claude-code@2.1.286 && claude --version
       - run: |
           git config user.name "github-actions[bot]"

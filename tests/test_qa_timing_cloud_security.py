@@ -366,3 +366,14 @@ def test_keepalive_chain_is_cron_independent_bounded_and_single():
     assert "poll.yml" in steps[1]["run"] and "sleep 600" in steps[1]["run"]
     stop = dt.datetime.fromisoformat(job["env"]["STOP_AT"].replace("Z", "+00:00"))
     assert config.scheduled_release(168) + h(3) < stop < config.scheduled_release(168) + h(12)
+
+
+@req("CLOUD11")
+def test_cloud11_optional_llm_installs_can_never_block_submission():
+    """Adding a Claude credential must not create a new way for a run to fail before submitting."""
+    for name in ("poll.yml", "reconcile.yml", "recover.yml"):
+        job = next(iter(workflows()[name]["jobs"].values()))
+        optional = [s for s in job["steps"] if str(s.get("if", "")).startswith(("env.HAS_LLM", "env.HAS_CLAUDE"))]
+        assert len(optional) == 2, name
+        for s in optional:
+            assert s.get("continue-on-error") is True and 0 < s.get("timeout-minutes", 0) <= 10, (name, s)
