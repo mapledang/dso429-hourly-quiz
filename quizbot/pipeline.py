@@ -12,7 +12,7 @@ from pathlib import Path
 
 from . import answers, config, state
 from .gitops import GitError, RebaseConflict, Repo
-from .solver import QuestionResult, solve_round
+from .solver import CONFIDENT, QuestionResult, solve_round
 from .solver.llm import LLMSolver
 from .source import Round, Snapshot, SourceError, fetch_questions
 
@@ -77,9 +77,26 @@ def _iso(t: dt.datetime) -> str:
     return t.astimezone(config.UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
+FLAGGED_STATUSES = {"guess", "llm_unverified", "llm_expression_override"}
+
+
+def _rank(status: str) -> int:
+    """Reliability order used when deciding whether a re-solve may replace a submitted answer."""
+    if status in CONFIDENT:
+        return 2
+    if status in ("llm_unverified", "llm_expression_override"):
+        return 1
+    return 0
+
+
+def _question_hash(q: dict) -> str:
+    return hashlib.sha256(json.dumps(q, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:16]
+
+
 def _round_log(rnd: Round, results: list[QuestionResult], now: dt.datetime) -> bytes:
     return (json.dumps({"round_id": rnd.round_id, "released_at": _iso(rnd.released_at) if rnd.released_at else None,
                         "source_hash": rnd.content_hash(), "solved_at": _iso(now),
+                        "question_hashes": {str(i): _question_hash(q) for i, q in rnd.questions.items()},
                         "questions": [r.to_dict() for r in results]}, indent=2) + "\n").encode()
 
 
@@ -104,18 +121,16 @@ class Pipeline:
 
     # -- helpers -----------------------------------------------------------------
     def _existing(self, round_id: int) -> bytes | None:
-        if self.mode == "production":
-            return self.repo.remote_blob(config.answer_path(round_id))
-        p = self.repo_dir / config.answer_path(round_id)
-        return p.read_bytes() if p.exists() else None
+        return self._read(config.answer_path(round_id))
 
     def _revision(self, rnd: Round, old_raw: bytes, entry: dict, now: dt.datetime) -> list[QuestionResult] | None:
         """Return results to re-submit, or None to leave the submitted file alone.
 
         Only revises files this pipeline wrote (hash recorded in the manifest), only inside the
-        free-revision window, and only questions that were previously flagged or whose source
-        text changed, where the new answer is confident."""
-        if not self.allow_revise or rnd.released_at is None:
+        free-revision window, and only (a) questions whose source text changed, which always take
+        the fresh answer, or (b) previously flagged questions, which are replaced only by a
+        strictly more reliable answer. Nothing else is re-solved."""
+        if not self.allow_revise or rnd.released_at is None or not rnd.complete:
             return None
         if config.is_graded(rnd.round_id) and not config.can_revise(rnd.released_at, now):
             return None
@@ -125,25 +140,37 @@ class Pipeline:
         source_changed = entry.get("source_hash") != rnd.content_hash()
         if not flagged and not source_changed:
             return None
-        if not rnd.complete:
+
+        prev_log = self._read(state.round_log_path(rnd.round_id))
+        prev = json.loads(prev_log) if prev_log else {}
+        prev_status = {q["q_index"]: q["status"] for q in prev.get("questions", [])}
+        prev_hashes = {int(k): v for k, v in prev.get("question_hashes", {}).items()}
+        text_changed = set()
+        if source_changed:
+            text_changed = {i for i, q in rnd.questions.items()
+                            if prev_hashes.get(i) != _question_hash(q)}  # no stored hash -> assume changed
+        targets = sorted(text_changed | flagged)
+        if not targets:
             return None
+
         old = answers.letters_of(old_raw)
-        fresh = _solve_with_gaps(rnd, self.llm)
+        fresh = {r.q_index: r for r in solve_round([rnd.questions[i] for i in targets], self.llm)}
         merged, changed = [], False
-        for r in fresh:
-            eligible = source_changed or r.q_index in flagged
-            if eligible and r.confident and r.letter != old.get(r.q_index):
+        for i in range(1, config.QUESTIONS_PER_ROUND + 1):
+            r, was = fresh.get(i), prev_status.get(i, "guess" if i in flagged else "kept")
+            if r is not None and (i in text_changed or _rank(r.status) > _rank(was)):
                 merged.append(r)
-                changed = True
-            elif eligible and r.confident:
-                merged.append(r)  # same letter, now confident: clears the flag
-                changed = changed or r.q_index in flagged
+                changed = changed or r.letter != old[i] or _rank(r.status) != _rank(was)
             else:
-                keep = next((x for x in fresh if x.q_index == r.q_index), r)
-                merged.append(QuestionResult(r.q_index, old.get(r.q_index, r.letter),
-                                             "kept" if r.q_index not in flagged else "guess",
-                                             keep.category, "kept previously submitted answer", keep.value))
+                keep = was if was in FLAGGED_STATUSES else "kept"
+                merged.append(QuestionResult(i, old[i], keep, "kept", "kept previously submitted answer", ""))
         return merged if changed else None
+
+    def _read(self, rel: str) -> bytes | None:
+        if self.mode == "production":
+            return self.repo.remote_blob(rel)
+        p = self.repo_dir / rel
+        return p.read_bytes() if p.exists() else None
 
     # -- main --------------------------------------------------------------------
     def run(self) -> RunReport:

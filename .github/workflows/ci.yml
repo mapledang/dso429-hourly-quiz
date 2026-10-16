@@ -27,3 +27,6 @@ jobs:
         run: python -m quizbot evaluate --report reports/practice_eval.json
       - name: Dry run against the live source (no commits)
         run: python -m quizbot run --mode dry-run --out /tmp/dry
+      - name: 12-hour graded rehearsal with injected failures (must score 100%)
+        run: python -m tests.simulate_week --hours 12 2>&1 | grep -v -E " (INFO|WARNING|ERROR) "
+        shell: bash -o pipefail {0}

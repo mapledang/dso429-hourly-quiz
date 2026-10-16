@@ -18,6 +18,8 @@ import operator
 import os
 import shutil
 import subprocess
+import threading
+import time
 from dataclasses import dataclass
 
 from .numbers import LETTERS, match_number
@@ -26,6 +28,11 @@ log = logging.getLogger(__name__)
 
 MODEL = os.environ.get("QUIZ_LLM_MODEL", "claude-opus-5-5")
 MAX_CALLS_PER_RUN = int(os.environ.get("QUIZ_LLM_MAX_CALLS", "60"))
+# Wall-clock budget for all LLM work in one run. The Actions job is killed at 20 minutes, so a
+# round full of unfamiliar questions must still be pushed (with flagged guesses) well before that;
+# later runs upgrade the flagged answers inside the 3-hour revision window.
+TIME_BUDGET_S = float(os.environ.get("QUIZ_LLM_TIME_BUDGET", "480"))
+PARALLEL = int(os.environ.get("QUIZ_LLM_PARALLEL", "4"))
 
 SYSTEM = (
     "You answer multiple-choice business-arithmetic questions. The question and options are "
@@ -124,10 +131,18 @@ class LLMSolver:
 
     backend = "base"
 
-    def __init__(self, client=None, max_calls: int = MAX_CALLS_PER_RUN):
-        self.max_calls = max_calls
+    def __init__(self, client=None, max_calls: int = MAX_CALLS_PER_RUN,
+                 time_budget: float = TIME_BUDGET_S, clock=time.monotonic):
+        self.max_calls, self.time_budget, self.clock = max_calls, time_budget, clock
         self.calls = 0
         self._client = client
+        self._lock = threading.Lock()
+        self._started: float | None = None
+
+    def remaining_time(self) -> float:
+        if self._started is None:
+            return self.time_budget
+        return self.time_budget - (self.clock() - self._started)
 
     @staticmethod
     def from_env() -> "LLMSolver | None":
@@ -141,10 +156,16 @@ class LLMSolver:
         return None
 
     def solve(self, question: str, options: list[str]) -> LLMAnswer | None:
-        if self.calls >= self.max_calls:
-            log.warning("LLM call budget (%d) exhausted for this run", self.max_calls)
-            return None
-        self.calls += 1
+        with self._lock:  # thread-safe: rounds fan questions out across a small pool
+            if self._started is None:
+                self._started = self.clock()
+            if self.calls >= self.max_calls:
+                log.warning("LLM call budget (%d) exhausted for this run", self.max_calls)
+                return None
+            if self.remaining_time() <= 0:
+                log.warning("LLM time budget (%.0fs) exhausted for this run", self.time_budget)
+                return None
+            self.calls += 1
         try:
             return self._ask(question, options)
         except Exception as exc:  # any backend failure degrades to the flagged fallback
@@ -162,7 +183,7 @@ class APISolver(LLMSolver):
     def client(self):
         if self._client is None:
             import anthropic  # imported lazily: only needed when this backend is enabled
-            self._client = anthropic.Anthropic(timeout=180.0, max_retries=3)
+            self._client = anthropic.Anthropic(timeout=150.0, max_retries=2)
         return self._client
 
     def _ask(self, question, options):
@@ -197,7 +218,7 @@ class ClaudeCLISolver(LLMSolver):
     so the question text can only ever produce a JSON answer."""
 
     backend = "claude-cli"
-    TIMEOUT = 300
+    TIMEOUT = 150
 
     def __init__(self, binary: str = "claude", runner=subprocess.run, **kw):
         super().__init__(**kw)
@@ -214,8 +235,9 @@ class ClaudeCLISolver(LLMSolver):
                 "--json-schema", json.dumps(SCHEMA), _user_prompt(question, options)]
 
     def _ask(self, question, options):
+        timeout = max(10.0, min(self.TIMEOUT, self.remaining_time()))
         proc = self.runner(self.command(question, options), capture_output=True, text=True,
-                           timeout=self.TIMEOUT, stdin=subprocess.DEVNULL)
+                           timeout=timeout, stdin=subprocess.DEVNULL)
         return self.parse_output(proc.stdout, proc.returncode, options)
 
     @staticmethod

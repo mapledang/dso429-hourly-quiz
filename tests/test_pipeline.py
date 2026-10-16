@@ -5,6 +5,8 @@ import json
 
 import pytest
 
+from types import SimpleNamespace
+
 from quizbot import answers, config, source, state
 from quizbot.gitops import GitError, Repo
 from quizbot.pipeline import EXIT_FAILURE, EXIT_NEEDS_REVIEW, EXIT_OK, Pipeline
@@ -138,6 +140,12 @@ def _submit_with_flag(work, at, flagged_q=3):
     m = json.loads(Repo(work).remote_blob(state.MANIFEST))
     m["rounds"]["49"].update(needs_review=[flagged_q], answers_sha256=hashlib.sha256(data).hexdigest())
     (work / state.MANIFEST).write_bytes(state.dump(m))
+    log_path = work / state.round_log_path(49)
+    rlog = json.loads(log_path.read_text())
+    for q in rlog["questions"]:
+        if q["q_index"] == flagged_q:
+            q["status"] = "guess"
+    log_path.write_text(json.dumps(rlog))
     git(work, "add", "-A"); git(work, "commit", "--quiet", "-m", "flag"); git(work, "push", "--quiet", "origin", "HEAD:main")
     return rows
 
@@ -283,3 +291,109 @@ def test_production_guard_blocks_local_and_simulated_runs(monkeypatch):
     monkeypatch.setenv("QUIZ_NOW", "2026-10-17T21:00:00Z")
     with pytest.raises(SystemExit, match="simulated clock"):
         main(["run", "--mode", "production"])
+
+
+# --- unfamiliar graded questions + slow/broken Claude: must still submit, then upgrade ---------
+
+from quizbot.solver.llm import ClaudeCLISolver  # noqa: E402
+
+UNKNOWN_TEXT = "Q{n}: A widget costs $40.00 to make and $10.00 to ship. What is the total cost of 3 widgets?"
+
+
+def _unknown_round(rid, released):
+    rows = as_round(practice_rows({1}), rid, released)
+    for r in rows:
+        r.update(question_text=UNKNOWN_TEXT.format(n=r["q_index"]),
+                 option_a="$150.00", option_b="$120.00", option_c="$130.00", option_d="$50.00")
+    return rows
+
+
+class ScriptedCLI(ClaudeCLISolver):
+    """Claude backend whose behaviour (hang / answer) is scripted per run, no subprocesses."""
+
+    def __init__(self, mode, **kw):
+        super().__init__(runner=self._run, **kw)
+        self.mode = mode
+
+    def _run(self, cmd, **kw):
+        import subprocess, time as _t
+        if self.mode == "hang":
+            raise subprocess.TimeoutExpired(cmd, kw["timeout"])
+        out = {"letter": "A", "result": "150", "expression": "3*(40+10)", "method": "m"}
+        return SimpleNamespace(returncode=0, stdout=json.dumps(
+            {"type": "result", "subtype": "success", "is_error": False, "structured_output": out}))
+
+
+def test_time_budget_still_submits_round_with_flagged_guesses(remote_and_clone, at):
+    _, clone = remote_and_clone
+    work = clone()
+    at("2026-10-17T21:10:00Z")
+    fake_now = [0.0]
+
+    def clock():
+        fake_now[0] += 100.0  # every check advances 100s: budget of 480s runs out after a few calls
+        return fake_now[0]
+
+    llm = ScriptedCLI("hang", time_budget=480, clock=clock)
+    rep = pipe(work, _unknown_round(49, R49), llm=llm).run()
+    assert rep.solved == [49] and rep.verified == [49]          # submitted despite Claude failing
+    assert rep.needs_review[49] == list(range(1, 26)) and rep.exit_code == EXIT_NEEDS_REVIEW
+    assert llm.calls < 25                                        # budget stopped further calls
+
+
+def test_flagged_guesses_upgraded_by_later_run_then_locked(remote_and_clone, at):
+    _, clone = remote_and_clone
+    work = clone()
+    rows = _unknown_round(49, R49)
+    at("2026-10-17T21:10:00Z")
+    pipe(work, rows, llm=ScriptedCLI("hang")).run()            # run 1: all guesses (median heuristic)
+    at("2026-10-17T21:20:00Z")
+    rep = pipe(work, rows, llm=ScriptedCLI("ok")).run()          # run 2: Claude works -> upgrade
+    assert rep.revised == [49] and rep.exit_code == EXIT_OK
+    assert set(answers.letters_of(remote_answer(work, 49)).values()) == {"A"}
+    m = json.loads(Repo(work).remote_blob(state.MANIFEST))
+    assert m["rounds"]["49"]["needs_review"] == []
+    head = git(work, "rev-parse", "origin/main")
+    at("2026-10-17T21:30:00Z")
+    rep = pipe(work, rows, llm=ScriptedCLI("ok")).run()          # run 3: nothing left to do
+    git(work, "fetch", "--quiet")
+    assert rep.revised == [] and git(work, "rev-parse", "origin/main") == head
+
+
+def test_flagged_guesses_not_upgraded_after_window(remote_and_clone, at):
+    _, clone = remote_and_clone
+    work = clone()
+    rows = _unknown_round(49, R49)
+    at("2026-10-17T21:10:00Z")
+    pipe(work, rows, llm=ScriptedCLI("hang")).run()
+    before = remote_answer(work, 49)
+    at("2026-10-18T00:30:00Z")                                   # 3.5h after release: locked
+    assert pipe(work, rows, llm=ScriptedCLI("ok")).run().revised == []
+    assert remote_answer(work, 49) == before
+
+
+def test_source_text_change_resolves_only_that_question(remote_and_clone, at, practice_keys):
+    _, clone = remote_and_clone
+    work = clone()
+    rows = as_round(practice_rows({1}), 49, R49)
+    at("2026-10-17T21:10:00Z")
+    pipe(work, rows).run()
+    # Instructor corrects q2 by swapping it for practice round 2's q2 (different numbers/answer).
+    replacement = next(r for r in practice_rows({2}) if r["q_index"] == "2")
+    rows2 = [dict(replacement, round_id="49", released_at=R49) if r["q_index"] == "2" else r for r in rows]
+    at("2026-10-17T21:40:00Z")
+    rep = pipe(work, rows2).run()
+    assert rep.revised == [49]
+    got = answers.letters_of(remote_answer(work, 49))
+    assert got[2] == practice_keys[(2, 2)]
+    assert all(got[q] == practice_keys[(1, q)] for q in range(1, 26) if q != 2)
+
+
+def test_parallel_llm_respects_call_cap():
+    from quizbot.solver import solve_round
+    llm = ScriptedCLI("ok", max_calls=5)
+    qs = [{"q_index": i, "question_text": UNKNOWN_TEXT.format(n=i), "option_a": "$150.00",
+           "option_b": "$120.00", "option_c": "$130.00", "option_d": "$50.00"} for i in range(1, 26)]
+    res = solve_round(qs, llm)
+    assert llm.calls == 5 and sum(r.status == "llm_verified" for r in res) == 5
+    assert sum(r.status == "guess" for r in res) == 20 and len(res) == 25

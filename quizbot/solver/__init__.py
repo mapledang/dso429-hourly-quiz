@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import logging
 import statistics
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 
-from .llm import LLMSolver
+from .llm import PARALLEL, LLMSolver
 from .numbers import LETTERS, parse_number
 from .templates import SOLVERS
 
@@ -43,7 +44,7 @@ def heuristic_guess(options: list[str]) -> str:
     return "A"
 
 
-def solve_question(q_index: int, question: str, options: list[str], llm: LLMSolver | None = None) -> QuestionResult:
+def template_solve(q_index: int, question: str, options: list[str]) -> QuestionResult | None:
     candidates = []
     for category, fn in SOLVERS:
         try:
@@ -64,21 +65,43 @@ def solve_question(q_index: int, question: str, options: list[str], llm: LLMSolv
     elif candidates:
         log.warning("q%d: template %s matched text but not options: %s",
                     q_index, candidates[0].category, candidates[0].match.detail)
+    return None
 
+
+def fallback_solve(q_index: int, question: str, options: list[str], llm: LLMSolver | None) -> QuestionResult:
     if llm is not None:
         ans = llm.solve(question, options)
         if ans is not None:
             return QuestionResult(q_index, ans.letter, ans.status, "llm", ans.method, ans.result)
-
     letter = heuristic_guess(options)
     log.error("q%d: no reliable solution, flagged guess %s", q_index, letter)
     return QuestionResult(q_index, letter, "guess", "unknown", "median-option heuristic", "")
 
 
+def solve_question(q_index: int, question: str, options: list[str], llm: LLMSolver | None = None) -> QuestionResult:
+    return template_solve(q_index, question, options) or fallback_solve(q_index, question, options, llm)
+
+
+def _options(q: dict) -> list[str]:
+    return [q["option_a"], q["option_b"], q["option_c"], q["option_d"]]
+
+
 def solve_round(questions: list[dict], llm: LLMSolver | None = None) -> list[QuestionResult]:
-    """`questions` are dicts with q_index, question_text, option_a..option_d (see source.py)."""
-    return [
-        solve_question(q["q_index"], q["question_text"],
-                       [q["option_a"], q["option_b"], q["option_c"], q["option_d"]], llm)
-        for q in sorted(questions, key=lambda q: q["q_index"])
-    ]
+    """`questions` are dicts with q_index, question_text, option_a..option_d (see source.py).
+
+    Templates run first for every question (milliseconds); only the leftovers go to the
+    LLM, a few at a time in parallel, under the solver's call and wall-clock budgets."""
+    ordered = sorted(questions, key=lambda q: q["q_index"])
+    results = {q["q_index"]: template_solve(q["q_index"], q["question_text"], _options(q)) for q in ordered}
+    todo = [q for q in ordered if results[q["q_index"]] is None]
+    if todo:
+        def work(q):
+            return fallback_solve(q["q_index"], q["question_text"], _options(q), llm)
+        if llm is not None and len(todo) > 1 and PARALLEL > 1:
+            with ThreadPoolExecutor(max_workers=min(PARALLEL, len(todo))) as pool:
+                for res in pool.map(work, todo):
+                    results[res.q_index] = res
+        else:
+            for q in todo:
+                results[q["q_index"]] = work(q)
+    return [results[q["q_index"]] for q in ordered]
