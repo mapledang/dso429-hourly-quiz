@@ -29,8 +29,9 @@ probability, % change, ratio split, sequences and date settlement. There are als
 computed value counts as a match only when exactly one option equals it at that option's displayed
 precision.
 
-If no template applies and an `ANTHROPIC_API_KEY` secret exists, Claude (`claude-opus-5-5`) is
-called with structured JSON output. The model must also return an arithmetic expression, which is
+If no template applies and a Claude credential secret exists (`CLAUDE_CODE_OAUTH_TOKEN` for your
+subscription, or `ANTHROPIC_API_KEY`), Claude (`claude-opus-5-5`) is called with structured JSON
+output. The model must also return an arithmetic expression, which is
 evaluated by a restricted AST walker (never `eval`) and matched independently. If neither works,
 a flagged heuristic guess is submitted. It scores 38% on practice versus 25% for random. The run
 then exits non-zero so GitHub emails you, and the answer may be corrected within the 3-hour window.
@@ -55,8 +56,14 @@ records the method, computed value and status for every question. Both are bookk
 1. Create a **public** repo and push this folder to `main` (see "Deploy" below).
 2. Settings → Actions → General: Actions enabled. The workflows request `contents: write`
    explicitly. If "Workflow permissions" is locked to read-only by a policy, set it to "Read and write".
-3. Optional: Settings → Secrets and variables → Actions → add `ANTHROPIC_API_KEY` to enable the
-   LLM fallback. It is capped at 60 calls per run (`QUIZ_LLM_MAX_CALLS`).
+3. Optional Claude fallback. Pick one; each is capped at 60 calls per run (`QUIZ_LLM_MAX_CALLS`).
+   - **Claude subscription (no API key):** run `claude setup-token`, then
+     `gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo <user>/<repo>` and paste the token. The runner
+     installs Claude Code 2.1.286 and calls `claude -p` with all tools, MCP servers and settings
+     disabled. This uses your subscription's usage limits.
+   - **API key:** `gh secret set ANTHROPIC_API_KEY --repo <user>/<repo>`.
+   - Prove it works: Actions → `llm-check` → Run workflow. It scores 24 practice questions sent
+     straight to Claude against the keys and never commits.
 4. GitHub → Settings → Notifications → Actions: enable failure emails.
 5. Submit `https://github.com/<user>/<repo>` to Brightspace "Homework 3 GitHub Repo Link" by
    **Fri Oct 16, 11:59 PM PT**.
