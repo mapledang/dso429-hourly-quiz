@@ -51,6 +51,32 @@ def evaluate(snap: Snapshot, keys: dict[tuple[int, int], str], llm=None) -> dict
     }
 
 
+def evaluate_llm_only(snap: Snapshot, keys: dict[tuple[int, int], str], llm, per_category: int = 2) -> dict:
+    """Send a category-balanced sample of practice questions straight to the LLM fallback
+    (templates bypassed) and score it against the official keys. Never writes answers."""
+    from .solver.templates import SOLVERS
+
+    picked, seen = [], collections.Counter()
+    for rid in sorted(r for r in snap.rounds if r in config.PRACTICE_ROUNDS):
+        for q in snap.rounds[rid].question_list():
+            opts = [q[f"option_{c}"] for c in "abcd"]
+            cat = next((c for c, fn in SOLVERS if fn(q["question_text"], opts)), "unknown")
+            if seen[cat] < per_category:
+                seen[cat] += 1
+                picked.append((rid, q, opts, cat))
+    rows, correct = [], 0
+    for rid, q, opts, cat in picked:
+        ans = llm.solve(q["question_text"], opts)
+        key = keys[(rid, q["q_index"])]
+        ok = ans is not None and ans.letter == key
+        correct += ok
+        rows.append({"round": rid, "q": q["q_index"], "category": cat, "key": key,
+                     "llm": ans.letter if ans else None, "status": ans.status if ans else "failed", "correct": ok})
+    return {"sampled": len(picked), "correct": correct, "llm_calls": llm.calls,
+            "accuracy": round(correct / len(picked), 4) if picked else 0.0,
+            "by_status": dict(collections.Counter(r["status"] for r in rows)), "rows": rows}
+
+
 def write_report(report: dict, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(report, indent=2) + "\n")

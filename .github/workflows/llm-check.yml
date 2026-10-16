@@ -1,0 +1,30 @@
+# Manual smoke test of the Claude API fallback: sends ~24 practice questions (2 per category)
+# straight to the model, bypassing templates, and scores them against the official keys.
+# Read-only: it never commits or submits anything.
+name: llm-check
+
+on:
+  workflow_dispatch:
+    inputs:
+      per_category:
+        description: "Questions per category (12 categories)"
+        default: "2"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: pip install --disable-pip-version-check -r requirements.txt
+      - name: Score LLM fallback against practice keys
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PER_CATEGORY: ${{ inputs.per_category }}
+        run: python -m quizbot evaluate --llm-only --per-category "$PER_CATEGORY" --report reports/llm_check.json

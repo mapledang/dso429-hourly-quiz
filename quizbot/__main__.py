@@ -75,6 +75,20 @@ def cmd_run(args, only_rounds=None, allow_revise=True) -> int:
 def cmd_evaluate(args) -> int:
     snap = source.fetch_questions()
     keys = source.fetch_keys()
+    if args.llm_only:
+        llm = LLMSolver.from_env()
+        if llm is None:
+            emit_summary("**LLM check: ANTHROPIC_API_KEY is not set.**")
+            return EXIT_FAILURE
+        rep = evaluate.evaluate_llm_only(snap, keys, llm, per_category=args.per_category)
+        evaluate.write_report(rep, Path(args.report))
+        lines = [f"## LLM fallback check: {rep['correct']}/{rep['sampled']} correct "
+                 f"({rep['accuracy']:.0%}), statuses {rep['by_status']}"]
+        lines += [f"- r{r['round']} q{r['q']} {r['category']}: key {r['key']}, llm {r['llm']} ({r['status']})"
+                  for r in rep["rows"]]
+        emit_summary("\n".join(lines))
+        # Must answer every question and be right on nearly all of them to count as working.
+        return 0 if rep["sampled"] and rep["accuracy"] >= 0.9 and "failed" not in rep["by_status"] else EXIT_FAILURE
     llm = LLMSolver.from_env() if args.with_llm else None
     rep = evaluate.evaluate(snap, keys, llm)
     evaluate.write_report(rep, Path(args.report))
@@ -145,6 +159,9 @@ def main(argv=None) -> int:
     e = sub.add_parser("evaluate", help="score the solver on practice rounds 1-48")
     e.add_argument("--report", default="reports/practice_eval.json")
     e.add_argument("--with-llm", action="store_true")
+    e.add_argument("--llm-only", action="store_true",
+                   help="bypass templates; score the Claude fallback on a category-balanced practice sample")
+    e.add_argument("--per-category", type=int, default=2)
 
     a = sub.add_parser("audit", help="final audit of rounds 1-168 on remote main")
     a.add_argument("--repo", help="owner/name (default: $GITHUB_REPOSITORY)")

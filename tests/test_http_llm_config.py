@@ -169,3 +169,18 @@ def test_revision_window_has_safety_margin():
     assert config.can_revise(t0, t0 + dt.timedelta(hours=2, minutes=30))
     assert not config.can_revise(t0, t0 + dt.timedelta(hours=2, minutes=45))
     assert not config.can_revise(t0, t0 + dt.timedelta(hours=4))
+
+
+def test_llm_only_evaluation_samples_every_category(practice_snapshot, practice_keys):
+    from quizbot.evaluate import evaluate_llm_only
+
+    class KeyedClient(FakeClient):
+        """Answers with the official key, so the harness itself is what's under test."""
+        def _create(self, **kw):
+            self.calls.append(kw)
+            return _response({"letter": "A", "result": "", "expression": "", "method": "m"})
+
+    rep = evaluate_llm_only(practice_snapshot, practice_keys, LLMSolver(client=KeyedClient(None)), per_category=1)
+    assert rep["sampled"] == 12 and rep["llm_calls"] == 12
+    assert len({r["category"] for r in rep["rows"]}) == 12
+    assert rep["correct"] == sum(r["key"] == "A" for r in rep["rows"])
