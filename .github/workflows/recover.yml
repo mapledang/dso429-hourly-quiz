@@ -1,0 +1,51 @@
+# Manual recovery for specific rounds. Never force-pushes, never deletes; valid files are only
+# revised inside the 3-hour window and only where the pipeline itself flagged an answer.
+name: recover
+
+on:
+  workflow_dispatch:
+    inputs:
+      rounds:
+        description: "Rounds to reconcile, e.g. 49-52,60"
+        required: true
+      no_revise:
+        description: "Only fill missing/invalid files (never revise valid ones)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: quiz-submit
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      HAS_LLM: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - if: env.HAS_LLM == 'true'
+        run: pip install --disable-pip-version-check -r requirements.txt
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: Recover
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ROUNDS: ${{ inputs.rounds }}
+          NO_REVISE: ${{ inputs.no_revise }}
+        run: |
+          # inputs pass through env vars (never interpolated into the script) and are validated by argparse
+          if [ "$NO_REVISE" = "true" ]; then extra="--no-revise"; else extra=""; fi
+          python -m quizbot recover --rounds "$ROUNDS" $extra

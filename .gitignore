@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+.env.*
+*.pem
+*.key
+reports/
+answers/.tmp-*
+state/**/*.tmp
+.DS_Store

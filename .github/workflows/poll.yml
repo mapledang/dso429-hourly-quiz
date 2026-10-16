@@ -1,0 +1,46 @@
+# Primary submitter. Runs every 10 minutes on GitHub-hosted runners (no laptop involved),
+# reconciles EVERY released round against answers/ on main, solves, pushes, verifies.
+# Cron is UTC. Rounds release at the top of each hour Pacific (PDT = UTC-7 for the whole
+# assignment window; DST ends Nov 1). Minutes 3,13,...,53 avoid GitHub's top-of-hour congestion
+# and the source CSV's ~5 minute publication lag. Full timing credit lasts 3 hours, so even
+# several delayed or dropped scheduled events leave ample margin.
+name: poll
+
+on:
+  schedule:
+    - cron: "3-59/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write  # push answer files; nothing else
+
+concurrency:
+  group: quiz-submit       # shared with reconcile.yml and recover.yml: one writer at a time
+  cancel-in-progress: false
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      HAS_LLM: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install optional LLM dependency
+        if: env.HAS_LLM == 'true'
+        run: pip install --disable-pip-version-check -r requirements.txt
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: Reconcile, solve, push, verify
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python -m quizbot run --mode production

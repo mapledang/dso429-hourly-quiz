@@ -1,0 +1,54 @@
+# Independent hourly safety net: a second schedule that reruns the full reconciliation,
+# checks that the poller is alive, and publishes the 1-168 audit as an artifact.
+name: reconcile
+
+on:
+  schedule:
+    - cron: "37 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: quiz-submit
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      HAS_LLM: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - if: env.HAS_LLM == 'true'
+        run: pip install --disable-pip-version-check -r requirements.txt
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: Reconcile all rounds
+        id: run
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python -m quizbot run --mode production
+      - name: Poller watchdog
+        if: always()
+        run: python -m quizbot watchdog --workflow poll.yml --max-age-minutes 45
+      - name: Audit rounds 1-168
+        if: always()
+        run: python -m quizbot audit --report reports/audit.json || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: audit
+          path: reports/audit.json
+          retention-days: 14
