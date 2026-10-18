@@ -1,0 +1,235 @@
+{
+  "round_id": 55,
+  "released_at": "2026-10-18T03:01:38Z",
+  "source_hash": "7994556de20db72f",
+  "solved_at": "2026-10-18T03:07:44Z",
+  "question_hashes": {
+    "1": "daf532a0592b6cda",
+    "2": "9260b6e99b5b8ef9",
+    "3": "5b7f159ce3da49d1",
+    "4": "12c5a5dadd25b832",
+    "5": "49ebb8d6189ad988",
+    "6": "2b45ff8a660ce381",
+    "7": "8bbafca71ed636ad",
+    "8": "b67feb4a47e6f4cd",
+    "9": "09accde8e7a52718",
+    "10": "90d5e95d3ab343ff",
+    "11": "d3d7c9553596ff1b",
+    "12": "191da353992ae309",
+    "13": "f45895673bf722b0",
+    "14": "ef68351b8a819ba2",
+    "15": "ef12b9f22671d952",
+    "16": "990a800651aa2c84",
+    "17": "a9b7e1969fdc3c4d",
+    "18": "0b964738c9936528",
+    "19": "f61e73e0eb245b33",
+    "20": "0a772ad8de349cdc",
+    "21": "e3c3e33ce72a6f08",
+    "22": "8b01cf8581e72b3f",
+    "23": "90ab76f4c14b2f89",
+    "24": "aec05867f0d333b1",
+    "25": "378dcb550f05efdf"
+  },
+  "questions": [
+    {
+      "q_index": 1,
+      "letter": "C",
+      "status": "exact",
+      "category": "break_even",
+      "method": "round(F/(P-V))",
+      "value": "696"
+    },
+    {
+      "q_index": 2,
+      "letter": "A",
+      "status": "exact",
+      "category": "break_even",
+      "method": "round(F/(P-V))",
+      "value": "375"
+    },
+    {
+      "q_index": 3,
+      "letter": "A",
+      "status": "exact",
+      "category": "compound_interest",
+      "method": "FV = P*(1+r/1)^(1*t)",
+      "value": "40019.2"
+    },
+    {
+      "q_index": 4,
+      "letter": "B",
+      "status": "exact",
+      "category": "date_settlement",
+      "method": "start + N calendar days",
+      "value": "2026-06-29"
+    },
+    {
+      "q_index": 5,
+      "letter": "B",
+      "status": "exact",
+      "category": "revenue",
+      "method": "revenue = units*price",
+      "value": "2425.2"
+    },
+    {
+      "q_index": 6,
+      "letter": "A",
+      "status": "exact",
+      "category": "date_settlement",
+      "method": "start + N calendar days",
+      "value": "2027-06-02"
+    },
+    {
+      "q_index": 7,
+      "letter": "B",
+      "status": "exact",
+      "category": "revenue",
+      "method": "revenue = units*price",
+      "value": "12015.429999999998"
+    },
+    {
+      "q_index": 8,
+      "letter": "B",
+      "status": "exact",
+      "category": "ratio_split",
+      "method": "total*part/sum(parts)",
+      "value": "278.1818181818182"
+    },
+    {
+      "q_index": 9,
+      "letter": "D",
+      "status": "exact",
+      "category": "currency_conversion",
+      "method": "amount*rate",
+      "value": "3618.8990699999995"
+    },
+    {
+      "q_index": 10,
+      "letter": "D",
+      "status": "exact",
+      "category": "revenue",
+      "method": "revenue = units*price",
+      "value": "8848.0"
+    },
+    {
+      "q_index": 11,
+      "letter": "C",
+      "status": "exact",
+      "category": "date_settlement",
+      "method": "start + N calendar days",
+      "value": "2026-06-08"
+    },
+    {
+      "q_index": 12,
+      "letter": "A",
+      "status": "exact",
+      "category": "compound_interest",
+      "method": "FV = P*(1+r/1)^(1*t)",
+      "value": "29354.475938"
+    },
+    {
+      "q_index": 13,
+      "letter": "D",
+      "status": "exact",
+      "category": "break_even",
+      "method": "round(F/(P-V))",
+      "value": "455"
+    },
+    {
+      "q_index": 14,
+      "letter": "A",
+      "status": "exact",
+      "category": "compound_interest",
+      "method": "FV = P*(1+r/1)^(1*t)",
+      "value": "83603.52792"
+    },
+    {
+      "q_index": 15,
+      "letter": "A",
+      "status": "exact",
+      "category": "percent_change",
+      "method": "(new-old)/old",
+      "value": "-5.638888888888889"
+    },
+    {
+      "q_index": 16,
+      "letter": "A",
+      "status": "exact",
+      "category": "gross_margin",
+      "method": "(rev-cogs)/rev",
+      "value": "42.63341871921182"
+    },
+    {
+      "q_index": 17,
+      "letter": "A",
+      "status": "exact",
+      "category": "ratio_split",
+      "method": "total*part/sum(parts)",
+      "value": "429.2307692307692"
+    },
+    {
+      "q_index": 18,
+      "letter": "B",
+      "status": "exact",
+      "category": "discount",
+      "method": "sale = price*(1-p)",
+      "value": "528.7339999999999"
+    },
+    {
+      "q_index": 19,
+      "letter": "B",
+      "status": "exact",
+      "category": "date_settlement",
+      "method": "start + N calendar days",
+      "value": "2027-03-17"
+    },
+    {
+      "q_index": 20,
+      "letter": "B",
+      "status": "exact",
+      "category": "break_even",
+      "method": "round(F/(P-V))",
+      "value": "104"
+    },
+    {
+      "q_index": 21,
+      "letter": "A",
+      "status": "exact",
+      "category": "ratio_split",
+      "method": "total*part/sum(parts)",
+      "value": "372.85714285714283"
+    },
+    {
+      "q_index": 22,
+      "letter": "A",
+      "status": "exact",
+      "category": "gross_margin",
+      "method": "(rev-cogs)/rev",
+      "value": "41.91293333333333"
+    },
+    {
+      "q_index": 23,
+      "letter": "D",
+      "status": "exact",
+      "category": "date_settlement",
+      "method": "start + N calendar days",
+      "value": "2027-03-20"
+    },
+    {
+      "q_index": 24,
+      "letter": "B",
+      "status": "exact",
+      "category": "sequence",
+      "method": "arithmetic",
+      "value": "70.0"
+    },
+    {
+      "q_index": 25,
+      "letter": "A",
+      "status": "exact",
+      "category": "discount",
+      "method": "sale = price*(1-p)",
+      "value": "355.44800000000004"
+    }
+  ]
+}
