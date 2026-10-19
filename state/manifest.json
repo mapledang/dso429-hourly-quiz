@@ -1,6 +1,6 @@
 {
   "errors": [],
-  "last_remote_verification": "2026-10-19T19:09:59Z",
+  "last_remote_verification": "2026-10-19T20:10:12Z",
   "last_source_check": "2026-10-19T20:10:10Z",
   "last_source_sha256": "25a6b1ce52e06df06f155610e28162fe9d6245dc9f094c5c08d408e7df88e69f",
   "last_submission": "2026-10-19T20:10:10Z",
@@ -1250,7 +1250,8 @@
       "retries": 0,
       "solved_at": "2026-10-19T20:10:10Z",
       "source_hash": "6eeeb2715c840e0b",
-      "status": "submitted"
+      "status": "submitted",
+      "verified_at": "2026-10-19T20:10:12Z"
     }
   },
   "schema": 1
