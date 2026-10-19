@@ -352,20 +352,29 @@ def test_sec06_no_path_traversal(rid):
     assert all(r >= 1 for r in snap.rounds)
 
 
-@req("CLOUD06", "CLOUD07")
-def test_keepalive_chain_is_cron_independent_bounded_and_single():
+@req("CLOUD06", "CLOUD07", "CLOUD10")
+def test_keepalive_chain_is_cron_independent_bounded_single_and_self_healing():
     k = workflows()["keepalive.yml"]
-    on = k[True]
-    assert "workflow_dispatch" in on                                  # chain links use dispatch, not cron
-    assert k["permissions"] == {"actions": "write", "contents": "read"}   # cannot push answers itself
-    assert k["concurrency"] == {"group": "keepalive", "cancel-in-progress": False}  # never >1 running
+    assert "workflow_dispatch" in k[True]                                    # links use dispatch, not cron
+    assert k["permissions"] == {"actions": "write", "contents": "read"}      # cannot push answers itself
+    assert k["concurrency"] == {"group": "keepalive", "cancel-in-progress": False}
     job = k["jobs"]["tick"]
-    assert job["timeout-minutes"] < 360
-    steps = job["steps"]
-    assert "keepalive.yml" in steps[0]["run"] and "STOP_AT" in steps[0]["run"]   # successor queued FIRST
-    assert "poll.yml" in steps[1]["run"] and "sleep 600" in steps[1]["run"]
+    assert job["timeout-minutes"] < 360 and len(job["steps"]) == 1
+    script = job["steps"][0]["run"]
+    # Regression for the Oct 18 incident: one HTTP 500 while queueing the successor ended the chain.
+    assert "retry()" in script and "ensure_successor || true" in script     # retried, never fatal
+    assert script.count("ensure_successor") >= 3                             # every tick + at the end
+    assert "poll.yml" in script and "sleep 600" in script
     stop = dt.datetime.fromisoformat(job["env"]["STOP_AT"].replace("Z", "+00:00"))
     assert config.scheduled_release(168) + h(3) < stop < config.scheduled_release(168) + h(12)
+    # Independent revivers: poll and reconcile restart the chain if nothing is active.
+    for name in ("poll.yml", "reconcile.yml"):
+        wf = workflows()[name]
+        assert wf["permissions"]["actions"] == "write"
+        steps = next(iter(wf["jobs"].values()))["steps"]
+        rev = [st for st in steps if st.get("name") == "Revive keepalive chain if it is not running"]
+        assert rev and rev[0]["if"] == "always()" and rev[0]["continue-on-error"] is True
+        assert "keepalive.yml" in rev[0]["run"]
 
 
 @req("CLOUD11")

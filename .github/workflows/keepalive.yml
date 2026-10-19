@@ -1,21 +1,20 @@
-# Cron-independent backstop. GitHub's `schedule` trigger is best-effort (it can be delayed or
-# dropped, and new repositories can wait a long time for their first scheduled run). This workflow
-# keeps a chain alive without cron:
-#   1. On start it immediately queues its own successor (workflow_dispatch with GITHUB_TOKEN is one
-#      of the events GitHub allows to start new runs). The successor waits in the concurrency group,
-#      so the chain survives even if this run is killed.
-#   2. For ~5.5 hours it dispatches poll.yml every 10 minutes (poll is the only writer).
-#   3. After the assignment window it stops queueing successors, ending the chain.
+# Cron-independent backstop. GitHub's `schedule` trigger is best-effort, so this workflow keeps a
+# self-perpetuating chain alive:
+#   * Every ~10 minutes it dispatches poll.yml (poll is the only writer).
+#   * Every tick it also makes sure a successor keepalive run is queued (retrying with backoff), so a
+#     single GitHub API error can no longer end the chain (it did once: HTTP 500, Oct 18 22:27 UTC).
+#   * poll.yml and reconcile.yml additionally revive the chain if no keepalive run is active.
+#   * After the assignment window it stops queueing successors, ending the chain.
 # The concurrency group allows one running + one pending run, so chains can never multiply.
 name: keepalive
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: "17 */2 * * *"   # restarts the chain if it ever breaks (when cron does work)
+    - cron: "17 */2 * * *"   # extra restarter whenever GitHub's cron does fire
 
 permissions:
-  actions: write    # dispatch poll.yml and the successor keepalive run; no contents access needed
+  actions: write    # dispatch poll.yml and the successor keepalive run; no contents access
   contents: read
 
 concurrency:
@@ -31,22 +30,28 @@ jobs:
       REPO: ${{ github.repository }}
       STOP_AT: "2026-10-23T02:00:00Z"   # 6h after round 168's release; chain ends after this
     steps:
-      - name: Queue successor first (chain survives if this run dies)
+      - name: Keep a successor queued and dispatch poll every 10 minutes for ~5.5 hours
         run: |
-          if [ "$(date -u +%s)" -lt "$(date -u -d "$STOP_AT" +%s)" ]; then
-            gh workflow run keepalive.yml --repo "$REPO" --ref main && echo "successor queued"
-          else
-            echo "assignment window over: not queueing a successor"
-          fi
-      - name: Dispatch poll every 10 minutes for ~5.5 hours
-        run: |
-          end=$(( $(date -u +%s) + 330*60 ))
           stop=$(date -u -d "$STOP_AT" +%s)
-          while [ "$(date -u +%s)" -lt "$end" ] && [ "$(date -u +%s)" -lt "$stop" ]; do
-            if gh workflow run poll.yml --repo "$REPO" --ref main; then
-              echo "$(date -u +%FT%TZ) dispatched poll"
-            else
-              echo "$(date -u +%FT%TZ) dispatch failed; retrying next tick"
+          end=$(( $(date -u +%s) + 330*60 ))
+
+          retry() {   # retry a command up to 5 times with exponential backoff; never abort the loop
+            for i in 1 2 3 4 5; do "$@" && return 0; sleep $(( 5 * 2**i )); done
+            echo "$(date -u +%FT%TZ) giving up this tick on: $*"; return 1
+          }
+          ensure_successor() {
+            [ "$(date -u +%s)" -lt "$stop" ] || return 0
+            waiting=$(gh run list --repo "$REPO" --workflow keepalive.yml --limit 20 \
+                        --json status,databaseId \
+                        --jq "[.[] | select(.databaseId != ${{ github.run_id }} and .status != \"completed\")] | length") || waiting=0
+            if [ "${waiting:-0}" -lt 1 ]; then
+              retry gh workflow run keepalive.yml --repo "$REPO" --ref main && echo "$(date -u +%FT%TZ) successor queued"
             fi
+          }
+
+          while [ "$(date -u +%s)" -lt "$end" ] && [ "$(date -u +%s)" -lt "$stop" ]; do
+            ensure_successor || true
+            retry gh workflow run poll.yml --repo "$REPO" --ref main && echo "$(date -u +%FT%TZ) dispatched poll" || true
             sleep 600
           done
+          ensure_successor || true

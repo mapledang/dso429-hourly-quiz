@@ -8,8 +8,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  actions: read
+  contents: write  # push answer files
+  actions: write   # only to revive the keepalive chain
 
 concurrency:
   group: quiz-submit
@@ -49,6 +49,21 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: python -m quizbot run --mode production
+      - name: Revive keepalive chain if it is not running
+        if: always()
+        continue-on-error: true  # bookkeeping only; never affects submission status
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          [ "$(date -u +%s)" -lt "$(date -u -d 2026-10-23T02:00:00Z +%s)" ] || exit 0
+          active=$(gh run list --repo "$REPO" --workflow keepalive.yml --limit 20 --json status \
+                     --jq '[.[] | select(.status != "completed")] | length')
+          if [ "${active:-0}" -lt 1 ]; then
+            gh workflow run keepalive.yml --repo "$REPO" --ref main && echo "keepalive chain was down: restarted"
+          else
+            echo "keepalive chain alive ($active active/queued)"
+          fi
       - name: Poller watchdog
         if: always()
         run: python -m quizbot watchdog --workflow poll.yml --max-age-minutes 45
