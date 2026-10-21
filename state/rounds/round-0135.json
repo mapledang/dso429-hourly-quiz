@@ -1,0 +1,235 @@
+{
+  "round_id": 135,
+  "released_at": "2026-10-21T11:01:48Z",
+  "source_hash": "304002a7e8010bb7",
+  "solved_at": "2026-10-21T11:11:12Z",
+  "question_hashes": {
+    "1": "28e7e581c6985c93",
+    "2": "a380bb09d35278d9",
+    "3": "58f5a7aff9f58c57",
+    "4": "8ddf05485b3aa0c7",
+    "5": "0708b5f17453a84a",
+    "6": "39585e01d1a30af4",
+    "7": "060aa6be489932b0",
+    "8": "7f1d8d24e6b11d54",
+    "9": "c9d5bbd11270ce76",
+    "10": "5e626ebe6583522a",
+    "11": "3a36b5c7f7f3892c",
+    "12": "0b36f06a219a438e",
+    "13": "9289169310d8719e",
+    "14": "3239d96815662a03",
+    "15": "56836a7763c9e57a",
+    "16": "5062d1ac7586b691",
+    "17": "2fe65cbcdbc9da3b",
+    "18": "20fa68ba4ffc9a37",
+    "19": "3d500951dc812bcb",
+    "20": "01aaf35ac985d388",
+    "21": "b775eb645b0e9b6d",
+    "22": "54ab6766a4ca6856",
+    "23": "649e90703c0e9423",
+    "24": "90029777e53ba0c1",
+    "25": "b498935426430f75"
+  },
+  "questions": [
+    {
+      "q_index": 1,
+      "letter": "D",
+      "status": "exact",
+      "category": "probability",
+      "method": "count/total",
+      "value": "34.285714285714285"
+    },
+    {
+      "q_index": 2,
+      "letter": "A",
+      "status": "exact",
+      "category": "break_even",
+      "method": "round(F/(P-V))",
+      "value": "822"
+    },
+    {
+      "q_index": 3,
+      "letter": "A",
+      "status": "exact",
+      "category": "percent_change",
+      "method": "(new-old)/old",
+      "value": "-36.70103092783505"
+    },
+    {
+      "q_index": 4,
+      "letter": "B",
+      "status": "exact",
+      "category": "revenue",
+      "method": "revenue = units*price",
+      "value": "46055.7"
+    },
+    {
+      "q_index": 5,
+      "letter": "A",
+      "status": "exact",
+      "category": "weighted_average",
+      "method": "sum(n_i*avg_i)/sum(n_i)",
+      "value": "49.92817679558011"
+    },
+    {
+      "q_index": 6,
+      "letter": "D",
+      "status": "exact",
+      "category": "percent_change",
+      "method": "(new-old)/old",
+      "value": "-10.31578947368421"
+    },
+    {
+      "q_index": 7,
+      "letter": "D",
+      "status": "exact",
+      "category": "sequence",
+      "method": "arithmetic",
+      "value": "73.0"
+    },
+    {
+      "q_index": 8,
+      "letter": "D",
+      "status": "exact",
+      "category": "percent_change",
+      "method": "(new-old)/old",
+      "value": "-23.91176470588235"
+    },
+    {
+      "q_index": 9,
+      "letter": "B",
+      "status": "exact",
+      "category": "percent_change",
+      "method": "(new-old)/old",
+      "value": "19.62222222222222"
+    },
+    {
+      "q_index": 10,
+      "letter": "D",
+      "status": "exact",
+      "category": "compound_interest",
+      "method": "FV = P*(1+r/1)^(1*t)",
+      "value": "39303.528"
+    },
+    {
+      "q_index": 11,
+      "letter": "A",
+      "status": "exact",
+      "category": "gross_margin",
+      "method": "(rev-cogs)/rev",
+      "value": "46.298859437751005"
+    },
+    {
+      "q_index": 12,
+      "letter": "D",
+      "status": "exact",
+      "category": "percent_change",
+      "method": "(new-old)/old",
+      "value": "34.2"
+    },
+    {
+      "q_index": 13,
+      "letter": "B",
+      "status": "exact",
+      "category": "revenue",
+      "method": "revenue = units*price",
+      "value": "7837.28"
+    },
+    {
+      "q_index": 14,
+      "letter": "C",
+      "status": "exact",
+      "category": "gross_margin",
+      "method": "(rev-cogs)/rev",
+      "value": "18.709287878787876"
+    },
+    {
+      "q_index": 15,
+      "letter": "D",
+      "status": "exact",
+      "category": "gross_margin",
+      "method": "(rev-cogs)/rev",
+      "value": "38.76013913043479"
+    },
+    {
+      "q_index": 16,
+      "letter": "C",
+      "status": "exact",
+      "category": "sequence",
+      "method": "arithmetic",
+      "value": "26.0"
+    },
+    {
+      "q_index": 17,
+      "letter": "C",
+      "status": "exact",
+      "category": "sequence",
+      "method": "arithmetic",
+      "value": "90.0"
+    },
+    {
+      "q_index": 18,
+      "letter": "D",
+      "status": "exact",
+      "category": "break_even",
+      "method": "round(F/(P-V))",
+      "value": "2640"
+    },
+    {
+      "q_index": 19,
+      "letter": "D",
+      "status": "exact",
+      "category": "revenue",
+      "method": "revenue = units*price",
+      "value": "4796.79"
+    },
+    {
+      "q_index": 20,
+      "letter": "A",
+      "status": "exact",
+      "category": "gross_margin",
+      "method": "(rev-cogs)/rev",
+      "value": "48.02949333333334"
+    },
+    {
+      "q_index": 21,
+      "letter": "D",
+      "status": "exact",
+      "category": "currency_conversion",
+      "method": "amount*rate",
+      "value": "2907.94567"
+    },
+    {
+      "q_index": 22,
+      "letter": "D",
+      "status": "exact",
+      "category": "currency_conversion",
+      "method": "amount*rate",
+      "value": "5113.2711"
+    },
+    {
+      "q_index": 23,
+      "letter": "D",
+      "status": "exact",
+      "category": "gross_margin",
+      "method": "(rev-cogs)/rev",
+      "value": "15.608084033613443"
+    },
+    {
+      "q_index": 24,
+      "letter": "D",
+      "status": "exact",
+      "category": "revenue",
+      "method": "revenue = units*price",
+      "value": "18257.55"
+    },
+    {
+      "q_index": 25,
+      "letter": "A",
+      "status": "exact",
+      "category": "gross_margin",
+      "method": "(rev-cogs)/rev",
+      "value": "45.010106583072094"
+    }
+  ]
+}
