@@ -1,9 +1,9 @@
 {
   "errors": [],
   "last_remote_verification": "2026-10-21T15:02:17Z",
-  "last_source_check": "2026-10-21T15:02:14Z",
-  "last_source_sha256": "d5839e643a14013b389d0043e1d78607e52d93516667a9e8e43711ab0d11d50c",
-  "last_submission": "2026-10-21T15:02:14Z",
+  "last_source_check": "2026-10-21T16:02:35Z",
+  "last_source_sha256": "4abb58f2be20a7fdb6bf75a987ff71dc893acf7bc134391039b6458a9cacc99b",
+  "last_submission": "2026-10-21T16:02:35Z",
   "rounds": {
     "1": {
       "answers_sha256": "2b454889c561205d6e4876de0f2513c91b17631c2588db8156c63f8e63bc66ea",
@@ -602,6 +602,18 @@
       "source_hash": "08ee9a4a495c06e7",
       "status": "submitted",
       "verified_at": "2026-10-16T06:20:49Z"
+    },
+    "140": {
+      "answers_sha256": "d06b1b07eb3c71fa413b212a055e9e7e76ea5a7034d983920de468e0ae55e6a2",
+      "methods": [
+        "exact"
+      ],
+      "needs_review": [],
+      "released_at": "2026-10-21T16:01:44Z",
+      "retries": 0,
+      "solved_at": "2026-10-21T16:02:35Z",
+      "source_hash": "8ecc07d4a45c691d",
+      "status": "submitted"
     },
     "15": {
       "answers_sha256": "dda482f56a4a5242bb3c7b61b718851ad4df22a55f1725b8050786198e96d56f",
