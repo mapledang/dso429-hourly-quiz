@@ -1,6 +1,6 @@
 {
   "errors": [],
-  "last_remote_verification": "2026-10-22T19:10:10Z",
+  "last_remote_verification": "2026-10-22T20:10:27Z",
   "last_source_check": "2026-10-22T20:10:24Z",
   "last_source_sha256": "65413bc69bcf8aec1e160e1739af72e3063b725d8af9884d540ab72672bee007",
   "last_submission": "2026-10-22T20:10:24Z",
@@ -1003,7 +1003,8 @@
       "retries": 0,
       "solved_at": "2026-10-22T20:10:24Z",
       "source_hash": "acc7be741a4602c0",
-      "status": "submitted"
+      "status": "submitted",
+      "verified_at": "2026-10-22T20:10:27Z"
     },
     "17": {
       "answers_sha256": "6476dd111cca3118b3651bfd2902f73e5307b78ee6e0bfe292724ea96b86afbd",
