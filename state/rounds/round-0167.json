@@ -1,0 +1,235 @@
+{
+  "round_id": 167,
+  "released_at": "2026-10-22T19:01:40Z",
+  "source_hash": "8a5b73c19a230cdd",
+  "solved_at": "2026-10-22T19:10:08Z",
+  "question_hashes": {
+    "1": "6e18c4f770e03e13",
+    "2": "82da01025ff8258c",
+    "3": "e721d8d5924e5f82",
+    "4": "e37bf23285e7fda5",
+    "5": "e76300aa3abe22da",
+    "6": "7961e04ea54361f6",
+    "7": "ccea65a78ec458ba",
+    "8": "2aa199fe720f7b1c",
+    "9": "cbd9220a7280567b",
+    "10": "d839172bee9d7854",
+    "11": "76ad1ac6ca44a462",
+    "12": "9312b4201f306dd5",
+    "13": "9d9dea96fdab56a9",
+    "14": "c4c4b49c2283a115",
+    "15": "8041ec893580ef97",
+    "16": "67016f4d0493fbdc",
+    "17": "6d4dd27fa6b758eb",
+    "18": "774fa24895e32c86",
+    "19": "ee9b52e0c8b02847",
+    "20": "d8690c8490062a69",
+    "21": "9dd01cc83b1a2b7e",
+    "22": "55d097d66a0e2eb9",
+    "23": "b77a42588955c2dd",
+    "24": "fec5639e85b6799b",
+    "25": "8da1db25233cef4a"
+  },
+  "questions": [
+    {
+      "q_index": 1,
+      "letter": "C",
+      "status": "exact",
+      "category": "percent_change",
+      "method": "(new-old)/old",
+      "value": "-42.4"
+    },
+    {
+      "q_index": 2,
+      "letter": "A",
+      "status": "exact",
+      "category": "revenue",
+      "method": "revenue = units*price",
+      "value": "2630.62"
+    },
+    {
+      "q_index": 3,
+      "letter": "B",
+      "status": "exact",
+      "category": "break_even",
+      "method": "round(F/(P-V))",
+      "value": "398"
+    },
+    {
+      "q_index": 4,
+      "letter": "A",
+      "status": "exact",
+      "category": "compound_interest",
+      "method": "FV = P*(1+r/1)^(1*t)",
+      "value": "52470.1875"
+    },
+    {
+      "q_index": 5,
+      "letter": "D",
+      "status": "exact",
+      "category": "break_even",
+      "method": "round(F/(P-V))",
+      "value": "414"
+    },
+    {
+      "q_index": 6,
+      "letter": "C",
+      "status": "exact",
+      "category": "revenue",
+      "method": "revenue = units*price",
+      "value": "60699.240000000005"
+    },
+    {
+      "q_index": 7,
+      "letter": "D",
+      "status": "exact",
+      "category": "ratio_split",
+      "method": "total*part/sum(parts)",
+      "value": "436.15384615384613"
+    },
+    {
+      "q_index": 8,
+      "letter": "D",
+      "status": "exact",
+      "category": "compound_interest",
+      "method": "FV = P*(1+r/1)^(1*t)",
+      "value": "26215.9202"
+    },
+    {
+      "q_index": 9,
+      "letter": "B",
+      "status": "exact",
+      "category": "probability",
+      "method": "count/total",
+      "value": "36.36363636363637"
+    },
+    {
+      "q_index": 10,
+      "letter": "B",
+      "status": "exact",
+      "category": "currency_conversion",
+      "method": "amount*rate",
+      "value": "4977.786672"
+    },
+    {
+      "q_index": 11,
+      "letter": "B",
+      "status": "exact",
+      "category": "weighted_average",
+      "method": "sum(n_i*avg_i)/sum(n_i)",
+      "value": "27.557077625570777"
+    },
+    {
+      "q_index": 12,
+      "letter": "B",
+      "status": "exact",
+      "category": "sequence",
+      "method": "arithmetic",
+      "value": "85.0"
+    },
+    {
+      "q_index": 13,
+      "letter": "D",
+      "status": "exact",
+      "category": "compound_interest",
+      "method": "FV = P*(1+r/1)^(1*t)",
+      "value": "60208.644434"
+    },
+    {
+      "q_index": 14,
+      "letter": "A",
+      "status": "exact",
+      "category": "currency_conversion",
+      "method": "amount*rate",
+      "value": "9883.529955"
+    },
+    {
+      "q_index": 15,
+      "letter": "C",
+      "status": "exact",
+      "category": "discount",
+      "method": "sale = price*(1-p)",
+      "value": "337.7155"
+    },
+    {
+      "q_index": 16,
+      "letter": "D",
+      "status": "exact",
+      "category": "discount",
+      "method": "sale = price*(1-p)",
+      "value": "236.5825"
+    },
+    {
+      "q_index": 17,
+      "letter": "A",
+      "status": "exact",
+      "category": "discount",
+      "method": "sale = price*(1-p)",
+      "value": "651.3465"
+    },
+    {
+      "q_index": 18,
+      "letter": "D",
+      "status": "exact",
+      "category": "gross_margin",
+      "method": "(rev-cogs)/rev",
+      "value": "21.412666666666663"
+    },
+    {
+      "q_index": 19,
+      "letter": "C",
+      "status": "exact",
+      "category": "discount",
+      "method": "sale = price*(1-p)",
+      "value": "35.022000000000006"
+    },
+    {
+      "q_index": 20,
+      "letter": "D",
+      "status": "exact",
+      "category": "gross_margin",
+      "method": "(rev-cogs)/rev",
+      "value": "47.93863507109005"
+    },
+    {
+      "q_index": 21,
+      "letter": "C",
+      "status": "exact",
+      "category": "ratio_split",
+      "method": "total*part/sum(parts)",
+      "value": "413.3333333333333"
+    },
+    {
+      "q_index": 22,
+      "letter": "C",
+      "status": "exact",
+      "category": "date_settlement",
+      "method": "start + N calendar days",
+      "value": "2027-03-11"
+    },
+    {
+      "q_index": 23,
+      "letter": "B",
+      "status": "exact",
+      "category": "sequence",
+      "method": "arithmetic",
+      "value": "90.0"
+    },
+    {
+      "q_index": 24,
+      "letter": "C",
+      "status": "exact",
+      "category": "ratio_split",
+      "method": "total*part/sum(parts)",
+      "value": "3108.0"
+    },
+    {
+      "q_index": 25,
+      "letter": "B",
+      "status": "exact",
+      "category": "ratio_split",
+      "method": "total*part/sum(parts)",
+      "value": "3096.0"
+    }
+  ]
+}
